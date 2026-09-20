@@ -134,3 +134,54 @@ décimales que le jeton n'en a ⇒ **refus**, jamais arrondi.
 
 **Conséquence** : un arrondi silencieux sur un montant est une perte d'argent
 sans trace. Le refus est bruyant, donc réparable.
+
+---
+
+## D11 — `better-sqlite3` plutôt que `node:sqlite`
+**Phase 3 · corrige `CLAUDE.md`**
+
+`CLAUDE.md` annonçait « SQLite via `node:sqlite` ». Ce module built-in n'existe
+qu'à partir de **Node 22.5** ; le projet cible Node ≥ 20 et la machine tourne en
+20.20.1 — `require('node:sqlite')` renvoie `ERR_UNKNOWN_BUILTIN_MODULE`.
+
+**Conséquence** : `better-sqlite3` (binaire précompilé, API synchrone). Sa
+synchronicité est un avantage ici : les handlers serveur mppx s'exécutent en
+ligne sur le chemin de la requête payante, donc pas de file d'attente à gérer.
+`CLAUDE.md` est corrigé.
+
+---
+
+## D12 — L'id de Challenge n'identifie pas une requête : compteur `occurrences`
+**Phase 3 · mesurée**
+
+L'id de Challenge est un HMAC de ses paramètres, donc une fonction pure. Entre
+deux requêtes identiques, seul `expires` varie — à la milliseconde. Mesuré :
+**19 collisions sur 50 requêtes rapides** sur le provider de la phase 1.
+
+Un journal indexé sur `challenge_id` fusionne donc des requêtes distinctes.
+C'est ce qui a rendu un test flaky avant d'être compris.
+
+**Conséquence** : `challenge_id` reste la clé primaire (dédupliquer est correct
+au niveau protocole), mais une colonne `occurrences` compte les émissions, et la
+réconciliation multiplie par elle. Deux écritures distinctes en découlent :
+`recordChallenge` (compte) pour `onChallengeCreated`, `ensureChallenge` (ne
+compte pas) pour les chemins success/failed — sinon l'insertion défensive de ces
+derniers gonfle le compteur.
+
+À retenir pour la phase 6 : une requête à Credential invalide émet **deux**
+Challenges (le soumis + le retry). `occurrences` compte des émissions, pas des
+requêtes HTTP.
+
+---
+
+## D13 — Le ledger stocke des références, jamais des preuves
+**Phase 3**
+
+Le schéma n'offre aucune colonne où loger un Credential, un Receipt brut ou du
+texte libre — messages d'erreur compris, car `PaymentError.details` peut
+contenir un Credential ou un hash. On stocke l'id de Challenge, le hash de
+transaction, le DID du payeur et le code d'erreur normalisé.
+
+**Conséquence** : la fuite est structurellement impossible, pas seulement
+évitée par discipline. Deux tests le verrouillent, dont un qui lit le fichier
+SQLite en binaire.

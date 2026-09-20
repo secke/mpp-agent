@@ -26,6 +26,8 @@ export type Config = {
   readonly port: number
   /** Prix d'un appel à /v1/search, en unités lisibles (ex. « 0.50 »). */
   readonly searchPrice: string
+  /** Fichier du ledger. `:memory:` pour une base éphémère (tests, démo). */
+  readonly ledgerPath: string
 }
 
 export class ConfigError extends Error {
@@ -81,5 +83,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     recipient: recipient as `0x${string}`,
     port,
     searchPrice,
+    ledgerPath: env['LEDGER_PATH'] ?? 'data/ledger.sqlite',
   }
 }

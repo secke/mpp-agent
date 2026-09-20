@@ -11,7 +11,8 @@ pourquoi, comment s'en servir, où est le code, comment c'est testé.
 | [Découverte OpenAPI](decouverte-openapi.md) | 1 | ✅ livré |
 | [Budget guard](budget-guard.md) | 2 | ✅ livré |
 | [Agent payeur](agent-payeur.md) | 2 | ✅ livré |
-| Ledger SQLite | 3 | ⏳ à venir |
+| [Ledger — journal d'audit](ledger.md) | 3 | ✅ livré |
+| Agent LLM avec tool use | 4 | ⏳ à venir |
 
 Référence protocole : [`../NOTES.md`](../NOTES.md).
 Décisions d'architecture : [`../DECISIONS.md`](../DECISIONS.md).

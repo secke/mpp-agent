@@ -12,7 +12,7 @@
 Node.js >= 20 (ESM), TypeScript, Hono (serveur HTTP),
 SDK **mppx** officiel (TypeScript), viem (comptes/signature),
 SDK Anthropic `@anthropic-ai/sdk` (agent avec tool use),
-SQLite via `node:sqlite` (ledger métier), vitest, Docker Compose, Prometheus.
+SQLite via `better-sqlite3` (ledger métier), vitest, Docker Compose, Prometheus.
 
 > Historique : la phase 0 a d'abord été instruite en Python (`pympp`).
 > Le projet est passé à TypeScript ; `mppx` est le SDK officiel **TS**.
@@ -35,6 +35,10 @@ docs/     # NOTES.md (spec), DECISIONS.md, features/
 - Ne jamais logger : MPP_SECRET_KEY, `Authorization: Payment`,
   `Payment-Authorization: Payment`, `Payment-Receipt` (NOTES §8).
 - `MPP_SECRET_KEY` >= 32 octets (imposé par le SDK).
+- Refuser un paiement côté client = **lever** depuis `onChallenge`.
+  Renvoyer `undefined` fait payer (NOTES §5.4).
+- Le ledger ne stocke jamais un Credential, un Receipt brut, un secret
+  ni un message d'erreur — seulement des références (NOTES §8).
 
 ## Plan
 Phases 0 à 8 : voir `PLAN.md`.

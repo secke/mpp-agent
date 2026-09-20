@@ -9,6 +9,7 @@ export const TEST_CONFIG: Config = {
   recipient: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
   port: 8787,
   searchPrice: '0.50',
+  ledgerPath: ':memory:',
 }
 
 export function env(overrides: Record<string, string | undefined> = {}) {

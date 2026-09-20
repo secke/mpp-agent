@@ -139,6 +139,14 @@ inter-implémentation.
 Plusieurs `WWW-Authenticate` peuvent être renvoyés pour offrir plusieurs moyens de paiement ;
 le client en choisit un et soumet **un seul** Credential.
 
+🔍 **Conséquence mesurée (phase 3) : l'id de Challenge n'identifie pas une requête.**
+L'id étant une fonction pure de ses paramètres, deux requêtes aux termes identiques
+émises dans la **même milliseconde** (seul `expires` les distingue, à la milliseconde)
+reçoivent le **même id**. Mesuré sur le provider de la phase 1 : **19 collisions sur
+50 requêtes rapides**. Tout journal ou métrique indexé sur `challenge.id` sous-estime
+donc le trafic — d'où le compteur `occurrences` du ledger (voir
+`docs/features/ledger.md`).
+
 ### 3.2 Credential (`Authorization` / `Payment-Authorization`)
 
 Source : <https://mpp.dev/protocol/credentials>.

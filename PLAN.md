@@ -98,23 +98,28 @@ Voir [`DECISIONS.md` D7](docs/DECISIONS.md).
 
 ---
 
-## Phase 3 — Ledger SQLite
+## Phase 3 — Ledger SQLite ✅ **terminée**
 
 **Branche** : `phase-3-ledger`
 
 **Objectif** : journal d'audit des paiements, côté serveur et côté agent.
 
-- [ ] `ledger/schema.sql` + `ledger/db.ts` (`node:sqlite`)
-- [ ] `ledger/record.ts` — écriture depuis `onChallengeCreated`,
+- [x] `ledger/schema.sql` + `ledger/db.ts` (**`better-sqlite3`**, pas
+      `node:sqlite` : indisponible avant Node 22.5 — voir D11)
+- [x] `ledger/record.ts` — écriture depuis `onChallengeCreated`,
       `onPaymentSuccess`, `onPaymentFailed`
-- [ ] Vue de réconciliation : challenge émis ↔ receipt encaissé
+- [x] Vues `ledger_reconciliation` et `ledger_unsettled`
 
-**Critères de sortie (tests)**
-- un cycle 402 → paiement écrit exactement une ligne, statut `success`
-- un échec écrit une ligne `failed` avec le type d'erreur MPP
-- **aucun secret journalisé** : test qui grep la base pour
-  `Authorization`, `Payment-Receipt`, la clé privée, `MPP_SECRET_KEY`
-- idempotence : rejouer le même `challenge.id` ne duplique pas de ligne
+**Critères de sortie (tests)** — 20 tests
+- [x] un cycle 402 → une ligne `challenged`, puis `success` avec référence et payeur
+- [x] un échec écrit `failed` avec le code d'erreur MPP normalisé
+- [x] **aucun secret journalisé** : lecture binaire du fichier SQLite +
+      assertion sur la liste exacte des colonnes
+- [x] idempotence : rejouer le même `challenge.id` ne duplique pas de ligne
+
+**Découverte majeure** : l'id de Challenge **n'identifie pas une requête** —
+19 collisions sur 50 requêtes rapides. D'où le compteur `occurrences`.
+Voir [`DECISIONS.md` D12](docs/DECISIONS.md).
 
 ---
 
