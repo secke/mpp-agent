@@ -9,7 +9,8 @@ pourquoi, comment s'en servir, où est le code, comment c'est testé.
 | [Endpoint payant et flux 402](endpoint-payant.md) | 1 | ✅ livré |
 | [Garde-fou testnet](garde-fou-testnet.md) | 1 | ✅ livré |
 | [Découverte OpenAPI](decouverte-openapi.md) | 1 | ✅ livré |
-| Agent payeur et budget guard | 2 | ⏳ à venir |
+| [Budget guard](budget-guard.md) | 2 | ✅ livré |
+| [Agent payeur](agent-payeur.md) | 2 | ✅ livré |
 | Ledger SQLite | 3 | ⏳ à venir |
 
 Référence protocole : [`../NOTES.md`](../NOTES.md).

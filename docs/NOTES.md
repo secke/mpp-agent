@@ -408,12 +408,45 @@ n'ont rien à voir. **Pour un agent avec budget guard c'est inacceptable** → t
 `polyfill: false` + utiliser `mppx.fetch` explicitement. → À figer par un test.
 
 Le hook **`onChallenge(challenge, { createCredential })`** est appelé à réception d'un 402 :
-c'est **là** que le budget guard décide de payer ou non (renvoyer `undefined` = ne pas payer).
-Hooks d'observation : `onPaymentFailed`, `onPaymentResponse` — chacun renvoie sa fonction de
-désinscription.
+c'est **là** que le budget guard décide de payer ou non.
+
+🚨 **Correction (phase 2) — renvoyer `undefined` ne refuse PAS le paiement.**
+La première rédaction de cette section l'affirmait, par déduction depuis la doc
+(« Called when a 402 challenge is received and no event handler supplies a
+credential »). Le code dit le contraire —
+`node_modules/mppx/dist/client/internal/Fetch.js` l. 153 :
+
+```js
+const credential = onChallengeCredential ?? (await createCredential())
+```
+
+`undefined` fait donc retomber le client sur la création de Credential **par
+défaut**, et il paie. Mesuré : avec un `onChallenge` renvoyant `undefined`, le
+client est allé jusqu'à la transaction on-chain — il n'a échoué que sur
+`InsufficientBalance(available: 0, required: 500000)`, autrement dit un wallet
+financé aurait payé.
+
+**Pour refuser, il faut lever.** Une exception depuis `onChallenge` se propage
+telle quelle hors de `mppx.fetch`, et aucune signature n'est demandée. Vérifié
+dans les deux sens (`tests/agent/client.test.ts`).
+
+Hooks d'observation : `onChallengeReceived`, `onCredentialCreated`,
+`onPaymentFailed`, `onPaymentResponse` — chacun renvoie sa fonction de
+désinscription. ⚠️ `onPaymentFailed` reçoit un `challenge` **optionnel**
+(`client/internal/Fetch.d.ts`) : ne pas supposer qu'il est toujours là.
 
 ⚠️ Côté client, le constructeur est **`tempo({ account })`** (pas `tempo.charge()`).
 Asymétrie client/serveur à ne pas confondre.
+
+**Garde-fous natifs du client** (`dist/tempo/client/Charge.d.ts`), à utiliser en
+plus du budget guard — ils agissent avant toute signature :
+
+| Option | Effet |
+|---|---|
+| `expectedChainId` | rejette tout Challenge dont le `methodDetails.chainId` diffère |
+| `allowedChainIds` | chaînes permises ; **omis = toutes**, tableau vide = aucune |
+| `expectedRecipients` | liste blanche d'adresses ; s'applique aussi aux `splits` |
+| `mode` | `'push'` (le client diffuse) / `'pull'` (le serveur diffuse) |
 
 ### 5.5 Stores (anti-rejeu) — `mppx` `Store`
 

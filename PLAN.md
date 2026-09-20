@@ -72,24 +72,29 @@ sur le testnet.
 
 ---
 
-## Phase 2 — Agent payeur et budget guard
+## Phase 2 — Agent payeur et budget guard ✅ **terminée**
 
 **Branche** : `phase-2-agent-payeur`
 
 **Objectif** : un client qui paie tout seul, mais jamais au-delà d'un budget.
 
-- [ ] `agent/wallet.ts` — compte viem depuis `.env`, jamais en dur
-- [ ] `agent/budget.ts` — budget guard pur (testable sans réseau) :
-      plafond par appel, plafond total, compteur de dépense, motifs de refus
-- [ ] `agent/client.ts` — `Mppx.create({ polyfill: false, onChallenge })`,
-      le guard décide de payer ou non avant signature
+- [x] `agent/amount.ts` — arithmétique entière (`bigint`), refus d'arrondi
+- [x] `agent/wallet.ts` — compte viem depuis `.env`, jamais en dur ni en log
+- [x] `agent/budget.ts` — budget guard pur : 7 motifs de refus typés,
+      réservation/confirmation/libération
+- [x] `agent/client.ts` — `Mppx.create({ polyfill: false, onChallenge })`
+      + garde-fous SDK (`expectedChainId`, `allowedChainIds`, `expectedRecipients`)
 
-**Critères de sortie (tests)**
-- `polyfill: false` vérifié : `globalThis.fetch` inchangé après création
-- au-dessus du plafond par appel → refus, aucune signature émise
-- budget total épuisé → refus
-- dépense cumulée correctement décomptée
-- montant mal formé / devise inattendue → refus (fail-closed)
+**Critères de sortie (tests)** — 40 tests
+- [x] `polyfill: false` vérifié : `globalThis.fetch` inchangé après création
+- [x] au-dessus du plafond par appel → refus, **aucune signature émise**
+- [x] budget total épuisé → refus
+- [x] dépense cumulée correctement décomptée (y compris engagements concurrents)
+- [x] montant mal formé / devise inattendue / chaîne absente → refus (fail-closed)
+
+**Découverte majeure** : renvoyer `undefined` depuis `onChallenge` **ne refuse
+pas** le paiement — il faut lever. Corrige une erreur de `NOTES.md` §5.4.
+Voir [`DECISIONS.md` D7](docs/DECISIONS.md).
 
 ---
 

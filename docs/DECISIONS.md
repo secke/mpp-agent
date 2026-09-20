@@ -79,3 +79,58 @@ dépendances et de la latence sans rien prouver sur le 402.
 
 **Conséquence** : `server/search.ts` est déterministe et sans I/O. La **forme**
 de la réponse est stable ; l'implémentation sera remplacée plus tard.
+
+---
+
+## D7 — Refuser un paiement se fait en levant, pas en renvoyant `undefined`
+**Phase 2 · mesurée · corrige une erreur de la phase 0**
+
+`NOTES.md` §5.4 affirmait d'abord que renvoyer `undefined` depuis `onChallenge`
+revenait à ne pas payer — déduction depuis la formulation de la doc. Le code dit
+le contraire (`client/internal/Fetch.js` l.153) :
+`const credential = onChallengeCredential ?? (await createCredential())`.
+
+Mesuré : avec `onChallenge` renvoyant `undefined`, le client va jusqu'à la
+transaction on-chain et n'échoue que sur solde nul. Un wallet financé aurait payé.
+
+**Conséquence** : `BudgetDenied` est une exception, jamais une valeur de retour.
+Deux tests verrouillent l'invariant (aucun appel à `createCredential` sur refus,
+aucune requête rejouée). `NOTES.md` a été corrigé.
+
+---
+
+## D8 — Budget guard pur, séparé du client
+**Phase 2**
+
+La logique qui autorise une dépense ne dépend ni du réseau, ni du SDK, ni d'un
+wallet. `agent/budget.ts` n'importe que le type `Challenge`.
+
+**Conséquence** : 26 tests exhaustifs en 15 ms, dont les cas tordus (montant
+absent, chaîne absente, concurrence). Le handler `onChallenge` est extrait en
+`createChallengeHandler(guard)` pour être testable avec un `createCredential`
+injecté — c'est ce qui permet de couvrir le chemin « autorisé » sans payer.
+
+---
+
+## D9 — Réserver à l'autorisation, confirmer au paiement
+**Phase 2**
+
+Décompter la dépense seulement à la confirmation laisse passer deux appels
+concurrents qui franchissent ensemble le plafond. On engage donc le montant dès
+l'autorisation ; `remaining = total − committed − reserved`.
+
+**Conséquence** : en cas d'issue inconnue, l'engagement reste engagé.
+Sur-compter arrête l'agent trop tôt ; sous-compter le fait trop dépenser.
+Seule la première erreur est tolérable.
+
+---
+
+## D10 — Montants en `bigint`, jamais en `number`
+**Phase 2**
+
+Les montants MPP sont des unités de base en chaîne de caractères. Toute
+conversion passe par `agent/amount.ts` en arithmétique entière. Plus de
+décimales que le jeton n'en a ⇒ **refus**, jamais arrondi.
+
+**Conséquence** : un arrondi silencieux sur un montant est une perte d'argent
+sans trace. Le refus est bruyant, donc réparable.
