@@ -1,0 +1,28 @@
+# Secrets — jamais commités (règle CLAUDE.md)
+.env
+.env.*
+!.env.example
+
+# Dépendances
+node_modules/
+
+# Build / cache
+dist/
+*.tsbuildinfo
+coverage/
+.vitest/
+
+# Ledger local (données de run, pas du code)
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+data/
+
+# Python (reliquat de la première passe, supprimé)
+.venv/
+__pycache__/
+
+# OS / éditeurs
+.DS_Store
+*.swp
