@@ -11,7 +11,7 @@
 ## Stack
 Node.js >= 20 (ESM), TypeScript, Hono (serveur HTTP),
 SDK **mppx** officiel (TypeScript), viem (comptes/signature),
-SDK Anthropic `@anthropic-ai/sdk` (agent avec tool use),
+SDK `openai` pointé sur **DeepSeek** (API compatible OpenAI, tool use),
 SQLite via `better-sqlite3` (ledger métier), vitest, Docker Compose, Prometheus.
 
 > Historique : la phase 0 a d'abord été instruite en Python (`pympp`).
@@ -39,6 +39,10 @@ docs/     # NOTES.md (spec), DECISIONS.md, features/
   Renvoyer `undefined` fait payer (NOTES §5.4).
 - Le ledger ne stocke jamais un Credential, un Receipt brut, un secret
   ni un message d'erreur — seulement des références (NOTES §8).
+- Un refus du budget guard revient au modèle comme `tool_result` structuré,
+  jamais comme une exception : il doit pouvoir en tenir compte.
+- Aucune clé privée, aucun Credential, aucun message d'erreur brut
+  n'entre dans le contexte du modèle.
 
 ## Plan
 Phases 0 à 8 : voir `PLAN.md`.

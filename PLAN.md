@@ -123,21 +123,31 @@ Voir [`DECISIONS.md` D12](docs/DECISIONS.md).
 
 ---
 
-## Phase 4 — Agent LLM avec tool use
+## Phase 4 — Agent LLM avec tool use ✅ **terminée**
 
 **Branche** : `phase-4-agent-llm`
 
-**Objectif** : Claude décide *lui-même* d'acheter une recherche.
+**Objectif** : le modèle décide *lui-même* d'acheter une recherche.
 
-- [ ] `agent/tools.ts` — outil `search_marketplace` exposé au modèle
-- [ ] `agent/loop.ts` — boucle tool use (`@anthropic-ai/sdk`)
-- [ ] Le budget guard reste l'autorité finale : le modèle propose, le guard dispose
+- [x] `agent/llm.ts` — port `LlmClient` + client **DeepSeek** (API compatible
+      OpenAI ; pas d'`@anthropic-ai/sdk`, voir D14)
+- [x] `agent/tools.ts` — outil `search_marketplace` et son exécuteur
+- [x] `agent/loop.ts` — boucle tool use, bornée en tours et en achats
+- [x] `agent/index.ts` — démonstration (`npm run agent -- "…"`)
+- [x] Le budget guard reste l'autorité finale
 
-**Critères de sortie (tests)**
-- boucle testée avec un client Anthropic mocké (pas d'appel réseau en CI)
-- un refus du guard est renvoyé au modèle comme `tool_result` d'erreur
-      exploitable, pas comme une exception
-- aucune clé privée n'atteint jamais le contexte du modèle
+**Critères de sortie (tests)** — 29 tests
+- [x] boucle testée avec un modèle scripté (aucun appel réseau en CI)
+- [x] un refus du guard revient comme `tool_result` exploitable, jamais en
+      exception ; un refus terminal coupe l'outil pour que le modèle conclue
+- [x] aucune clé privée, aucun Credential, aucun message d'erreur brut
+      n'atteint le contexte du modèle
+
+**Démontré en vrai** contre le provider et le modèle DeepSeek : budget
+insuffisant → refus `per-call-cap`, le modèle conclut en 2 tours en signalant
+la limite ; budget suffisant mais wallet vide → `search-unavailable`, le modèle
+retente une fois. `dépense : 0` dans les deux cas — la réservation est bien
+libérée.
 
 ---
 

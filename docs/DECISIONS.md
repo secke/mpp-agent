@@ -185,3 +185,60 @@ transaction, le DID du payeur et le code d'erreur normalisé.
 **Conséquence** : la fuite est structurellement impossible, pas seulement
 évitée par discipline. Deux tests le verrouillent, dont un qui lit le fichier
 SQLite en binaire.
+
+---
+
+## D14 — DeepSeek au lieu d'Anthropic
+**Phase 4 · corrige `CLAUDE.md`**
+
+Pas de crédit Anthropic disponible. DeepSeek expose une API **compatible
+OpenAI** (`base_url = https://api.deepseek.com`, SDK `openai`), avec tool
+calling au format standard — vérifié par appel réel avant d'écrire la moindre
+ligne, ainsi que la liste des modèles (`deepseek-flash`, `deepseek-v4-pro`) via
+`GET /models`.
+
+**Conséquence** : `CLAUDE.md` corrigé. Le mode « thinking » de DeepSeek est
+désactivé par défaut : il consomme des tokens de raisonnement sans bénéfice
+pour une boucle d'outils cadrée.
+
+---
+
+## D15 — L'agent parle à un port, pas à un SDK
+**Phase 4**
+
+`agent/llm.ts` définit `LlmClient { turn(messages, tools) }`. Le reste de
+l'agent ne connaît que ce type ; le SDK OpenAI ne vit que dans
+`createLlm`.
+
+**Conséquence** : la boucle se teste avec un modèle scripté, sans réseau ni
+crédit consommé en CI (29 tests). Changer de fournisseur ne touche pas la
+logique. Le transport `fetch` est lui aussi injectable, ce qui permet de tester
+la traduction vers Chat Completions.
+
+---
+
+## D16 — Un refus du guard est un `tool_result`, pas une exception
+**Phase 4**
+
+Si le refus remontait en exception, la boucle casserait et le modèle n'aurait
+aucun moyen d'en tenir compte. L'exécuteur renvoie donc `{ ok: false, code,
+message, hint, retryable }`, et un refus non réessayable coupe l'outil pour le
+tour suivant.
+
+**Conséquence, observée en vrai** : sur budget insuffisant, le modèle conclut
+en deux tours en signalant explicitement la limite ; sur panne technique
+(`retryable: true`), il retente une fois puis conclut. Le `hint` porte
+l'instruction, pas seulement le diagnostic.
+
+---
+
+## D17 — Le contexte du modèle est une frontière de sécurité
+**Phase 4**
+
+Ne remontent au modèle que les données achetées, le montant dépensé et le
+budget restant. Les **messages d'erreur bruts** sont retenus au même titre que
+les Credentials : une panne de signature peut contenir un hash de transaction
+ou un Credential. Le modèle reçoit un `search-unavailable` générique.
+
+**Conséquence** : un test balaie tous les messages transmis et y cherche tout
+motif `0x` + 64 hex, tout `Authorization`, tout Credential.

@@ -12,7 +12,8 @@ pourquoi, comment s'en servir, où est le code, comment c'est testé.
 | [Budget guard](budget-guard.md) | 2 | ✅ livré |
 | [Agent payeur](agent-payeur.md) | 2 | ✅ livré |
 | [Ledger — journal d'audit](ledger.md) | 3 | ✅ livré |
-| Agent LLM avec tool use | 4 | ⏳ à venir |
+| [Agent LLM — le modèle décide d'acheter](agent-llm.md) | 4 | ✅ livré |
+| E2E testnet réel | 5 | ⏳ à venir |
 
 Référence protocole : [`../NOTES.md`](../NOTES.md).
 Décisions d'architecture : [`../DECISIONS.md`](../DECISIONS.md).
