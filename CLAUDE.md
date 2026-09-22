@@ -43,6 +43,12 @@ docs/     # NOTES.md (spec), DECISIONS.md, features/
   jamais comme une exception : il doit pouvoir en tenir compte.
 - Aucune clé privée, aucun Credential, aucun message d'erreur brut
   n'entre dans le contexte du modèle.
+- Anti-rejeu : jamais le store mémoire par défaut de mppx en production —
+  ni partagé entre processus, ni durable. `sqlite` (mono-hôte) ou `redis`.
+- Route à corps (POST/PUT/PATCH) : lier le corps au Challenge via `scope`
+  + `BodyDigest.compute`. Le serveur TS de mppx n'a pas d'option `body`.
+- `Cache-Control: private` sur les 200 porteuses d'un `Payment-Receipt`
+  (mppx ne pose que `no-store` sur les 402).
 
 ## Plan
 Phases 0 à 8 : voir `PLAN.md`.

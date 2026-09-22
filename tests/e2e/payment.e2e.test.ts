@@ -20,6 +20,7 @@ import { loadAgentConfig } from '../../agent/wallet.ts'
 import { openLedger } from '../../ledger/db.ts'
 import { attachLedger, Ledger } from '../../ledger/record.ts'
 import { createApp } from '../../server/app.ts'
+import { createReplayStore } from '../../server/bootstrap.ts'
 import { loadConfig, PATH_USD, TESTNET_CHAIN_ID } from '../../server/config.ts'
 import { createPayment } from '../../server/payment.ts'
 import { loadDotEnv } from './loadEnv.ts'
@@ -57,7 +58,9 @@ describe.skipIf(!configured)('paiement réel sur Moderato', () => {
 
   it('paie, reçoit le contenu, et le transfert est confirmé on-chain', { timeout: 180_000 }, async () => {
       const price = toBaseUnits(serverConfig.searchPrice, 6)
-      const payment = createPayment(serverConfig)
+      // Même câblage qu'en production : le store anti-rejeu vient de la config.
+      const { store, close } = await createReplayStore(serverConfig)
+      const payment = createPayment(serverConfig, store)
       const ledger = new Ledger(openLedger(':memory:'))
       attachLedger(payment, ledger)
       const app = createApp(serverConfig, payment)
@@ -122,6 +125,8 @@ describe.skipIf(!configured)('paiement réel sur Moderato', () => {
       )
       expect(replay.status).toBe(402)
       expect(replay.headers.get('WWW-Authenticate')).toMatch(/^Payment /)
+
+      await close()
   })
 })
 

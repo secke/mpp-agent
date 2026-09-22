@@ -11,15 +11,30 @@
  *   x-payment-info extensions »), helper `discovery(app, mppx, …)` de mppx/hono.
  */
 import { Hono } from 'hono'
-import { Credential } from 'mppx'
+import { BodyDigest, Credential } from 'mppx'
 import { discovery } from 'mppx/hono'
 
+import { analyze } from './analyze.ts'
 import type { Config } from './config.ts'
 import { createPayment, type Payment } from './payment.ts'
 import { search } from './search.ts'
 
 export function createApp(config: Config, payment: Payment = createPayment(config)) {
   const app = new Hono()
+
+  /**
+   * Une réponse 200 porteuse d'un Receipt ne doit pas être mise en cache par
+   * un intermédiaire partagé. mppx pose `no-store` sur les 402 tout seul,
+   * mais pas `private` sur les 200 — c'est à notre charge.
+   * Source : https://mpp.dev/advanced/security
+   * « Send Cache-Control: private on successful responses that include
+   *   Payment-Receipt. »
+   */
+  app.use('*', async (c, next) => {
+    await next()
+    if (c.res.status === 200 && c.res.headers.has('Payment-Receipt'))
+      c.res.headers.set('Cache-Control', 'private')
+  })
 
   app.get('/healthz', (c) => c.json({ status: 'ok', realm: config.realm }))
 
@@ -39,6 +54,37 @@ export function createApp(config: Config, payment: Payment = createPayment(confi
       return c.json({ query, payer, results: search(query) })
     },
   )
+
+  /**
+   * Route POST : le corps est **lié** au Challenge.
+   *
+   * ⚠️ Le serveur TypeScript de mppx n'expose pas d'option `body`/`digest`
+   * sur le middleware (contrairement au SDK Python). On implémente donc la
+   * liaison via `scope`, que mppx intègre à `meta` → `opaque` → HMAC du
+   * Challenge. Un corps modifié après l'émission produit un scope différent,
+   * donc un identifiant de Challenge différent : le Credential ne vérifie plus.
+   *
+   * Source de l'exigence : https://mpp.dev/advanced/security
+   * « Include a digest parameter for POST, PUT, and PATCH requests so clients
+   *   cannot change the request body after receiving a Challenge. »
+   */
+  app.post('/v1/analyze', async (c, next) => {
+    // `clone()` : on lit le corps sans le consommer pour la suite de la chaîne.
+    const raw = await c.req.raw.clone().text()
+    const middleware = payment.charge({
+      amount: config.analyzePrice,
+      description: 'Analyse documentaire — 1 requête',
+      scope: `POST /v1/analyze#${BodyDigest.compute(raw)}`,
+    })
+    return middleware(c, next)
+  })
+
+  app.post('/v1/analyze', async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as { text?: unknown }
+    const header = c.req.header('Authorization')
+    const payer = header ? Credential.deserialize(header).source : undefined
+    return c.json({ payer, analysis: analyze(typeof body.text === 'string' ? body.text : '') })
+  })
 
   discovery(app, payment, {
     auto: true,

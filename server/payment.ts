@@ -11,14 +11,22 @@
  * émet un Challenge annonçant chainId 4217 (mainnet) avec une devise testnet —
  * configuration incohérente. Seul `testnet: true` aligne les deux.
  */
-import { Challenge } from 'mppx'
+import { Challenge, type Store } from 'mppx'
 import { Mppx, tempo } from 'mppx/hono'
 
 import { PATH_USD, TESTNET_CHAIN_ID, TOKEN_DECIMALS, type Config } from './config.ts'
 
 export type Payment = ReturnType<typeof createPayment>
 
-export function createPayment(config: Config) {
+export function createPayment(
+  config: Config,
+  /**
+   * Store anti-rejeu. Omis, mppx retombe sur un store **mémoire** : non
+   * partagé entre processus et perdu au redémarrage (voir server/stores.ts).
+   * `loadConfig` refuse ce défaut sans acquittement explicite.
+   */
+  store?: Store.AtomicStore | undefined,
+) {
   return Mppx.create({
     methods: [
       tempo.charge({
@@ -26,6 +34,7 @@ export function createPayment(config: Config) {
         recipient: config.recipient,
         currency: PATH_USD,
         decimals: TOKEN_DECIMALS,
+        ...(store ? { store } : {}),
       }),
     ],
     realm: config.realm,

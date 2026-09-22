@@ -10,6 +10,10 @@ export const TEST_CONFIG: Config = {
   port: 8787,
   searchPrice: '0.50',
   ledgerPath: ':memory:',
+  replayStore: 'sqlite',
+  replayStorePath: ':memory:',
+  redisUrl: undefined,
+  analyzePrice: '1.00',
 }
 
 export function env(overrides: Record<string, string | undefined> = {}) {
@@ -20,6 +24,8 @@ export function env(overrides: Record<string, string | undefined> = {}) {
     MPP_SEARCH_PRICE: '0.50',
     PORT: '8787',
     MPP_NETWORK: 'testnet',
+    REPLAY_STORE: 'sqlite',
+    REPLAY_STORE_PATH: ':memory:',
     ...overrides,
   } as NodeJS.ProcessEnv
 }

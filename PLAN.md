@@ -199,18 +199,27 @@ répondent ; `docker history` ne révèle aucun secret.
 
 ---
 
-## Phase 8 — Durcissement
+## Phase 8 — Durcissement ✅ **terminée** (une réserve)
 
-**Branche** : `phase-8-durcissement`
+**Branche** : `phase-8-durcissement` — *traitée avant les phases 6 et 7,
+pour fermer le seul trou de sécurité réel.*
 
-- [ ] `digest` sur les routes `POST`/`PUT`/`PATCH` (liaison du corps)
-- [ ] Store anti-rejeu partagé (Redis) au lieu de la mémoire
-- [ ] Rotation de `MPP_SECRET_KEY` avec fenêtre de recouvrement
-- [ ] `Cache-Control: private` sur les 200 porteuses d'un Receipt
-- [ ] Revue de sécurité finale contre `docs/NOTES.md` §8
+- [x] Liaison du corps sur `POST /v1/analyze` — via `scope` + `BodyDigest`,
+      le serveur TS de mppx n'ayant **pas** d'option `body` (voir D20)
+- [x] Store anti-rejeu partagé **et durable** : `sqlite` (défaut) ou `redis`,
+      le store mémoire refusé sans acquittement explicite (D21)
+- [ ] ⚠️ Rotation de `MPP_SECRET_KEY` avec recouvrement — **non implémentée** :
+      `Mppx.create` ne prend qu'une seule clé. Procédure coordonnée documentée
+      à la place, fenêtre bornée à 5 min (D22)
+- [x] `Cache-Control: private` sur les 200 porteuses d'un Receipt
+- [x] Revue de sécurité contre `docs/NOTES.md` §8 — 9 exigences sur 10
 
-**Critères de sortie** : corps modifié après émission du Challenge → rejet ;
-Credential rejoué → rejet ; checklist §8 intégralement cochée.
+**Critères de sortie**
+- [x] corps modifié après émission du Challenge → `invalid-challenge`
+      (contre `verification-failed` avec le corps d'origine : c'est le
+      contraste qui prouve la discrimination)
+- [x] Credential rejoué → 402, marqueur **persisté sur disque**
+- [x] checklist §8 : 9/10, la dixième bloquée par le SDK et documentée
 
 ---
 

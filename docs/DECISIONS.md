@@ -267,3 +267,58 @@ l'absence de `AGENT_PRIVATE_KEY`, le test s'ignore au lieu d'échouer.
 **Conséquence** : la CI ne dépense rien et ne casse pas faute de wallet.
 `loadDotEnv` reste cantonné aux tests e2e : les tests unitaires ne dépendent
 d'aucun secret ni d'aucun fichier local, et ne doivent pas commencer à le faire.
+
+---
+
+## D20 — La liaison du corps passe par `scope`, faute d'option `body`
+**Phase 8**
+
+La spec exige un `digest` liant le corps sur POST/PUT/PATCH. Le serveur
+TypeScript de `mppx` n'expose **ni `body` ni `digest`** sur son middleware
+(`MethodFn.Options` : `description`, `expires`, `meta`, `scope`) — contrairement
+au SDK Python, qui a `mpp.charge(body=…)`.
+
+On met donc le digest dans `scope`, que mppx fusionne dans `meta` → `opaque` →
+entrée HMAC du Challenge. Le middleware est construit **par requête**, `scope`
+étant une option statique.
+
+**Conséquence** : corps modifié ⇒ scope différent ⇒ id de Challenge différent
+⇒ `invalid-challenge`. Le test s'appuie sur le contraste avec
+`verification-failed` (corps d'origine), ce qui prouve la discrimination sans
+dépenser un centime.
+
+---
+
+## D21 — Le store mémoire ne peut plus être choisi par accident
+**Phase 8**
+
+Le défaut de `tempo.charge` est un store mémoire : ni partagé entre processus,
+**ni durable**. Le second point est le plus insidieux — un redémarrage rouvre
+la fenêtre de rejeu même en mono-instance.
+
+`REPLAY_STORE` vaut `sqlite` par défaut ; `memory` exige
+`REPLAY_STORE_MEMORY_ACK=i-know` sinon le serveur refuse de démarrer.
+
+**Conséquence** : un contrat de store commun est exécuté contre les trois
+supports (dont un vrai Redis en conteneur), ce qui les rend réellement
+interchangeables. Le test e2e utilise `createReplayStore(config)` — le même
+câblage qu'en production, sinon il ne prouverait rien.
+
+---
+
+## D22 — Rotation de secret : procédure coordonnée, pas de machinerie non testée
+**Phase 8 · réserve assumée**
+
+`Mppx.create` prend un `secretKey?: string` unique : aucune notion de clé
+précédente, donc pas de recouvrement natif. Deux contournements ont été
+écartés — une cascade de deux instances (invalidable sans multiplier les
+paiements réels) et un identifiant de clé dans le `scope` (sans effet, c'est
+le HMAC qui échoue).
+
+**Décision** : ne pas livrer de machinerie de sécurité non testée. À la place,
+une procédure de déploiement coordonné, avec une fenêtre **bornée et connue**
+(5 min, le `expires` par défaut de mppx) : drain, attente, permutation.
+
+**Conséquence** : courte fenêtre de 402 avec Challenge frais pendant la
+rotation — dégradation, pas panne. À rouvrir si `mppx` accepte un jour une
+liste de clés.

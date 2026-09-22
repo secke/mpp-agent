@@ -28,7 +28,18 @@ export type Config = {
   readonly searchPrice: string
   /** Fichier du ledger. `:memory:` pour une base éphémère (tests, démo). */
   readonly ledgerPath: string
+  /** Support du store anti-rejeu. */
+  readonly replayStore: ReplayStoreKind
+  /** Fichier du store anti-rejeu SQLite. */
+  readonly replayStorePath: string
+  /** URL Redis, requise quand `replayStore === 'redis'`. */
+  readonly redisUrl: string | undefined
+  /** Prix d'un appel à /v1/analyze (route POST, corps lié par digest). */
+  readonly analyzePrice: string
 }
+
+export const REPLAY_STORES = ['memory', 'sqlite', 'redis'] as const
+export type ReplayStoreKind = (typeof REPLAY_STORES)[number]
 
 export class ConfigError extends Error {
   override name = 'ConfigError'
@@ -72,6 +83,30 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
         `Attendu : un montant lisible, max ${TOKEN_DECIMALS} décimales (ex. "0.50").`,
     )
 
+  const analyzePrice = env['MPP_ANALYZE_PRICE'] ?? '1.00'
+  if (!AMOUNT_RE.test(analyzePrice))
+    throw new ConfigError(`MPP_ANALYZE_PRICE invalide : "${analyzePrice}".`)
+
+  const replayStore = (env['REPLAY_STORE'] ?? 'sqlite') as ReplayStoreKind
+  if (!REPLAY_STORES.includes(replayStore))
+    throw new ConfigError(
+      `REPLAY_STORE="${replayStore}" inconnu. Valeurs : ${REPLAY_STORES.join(', ')}.`,
+    )
+  const redisUrl = env['REDIS_URL']
+  if (replayStore === 'redis' && !redisUrl)
+    throw new ConfigError('REPLAY_STORE=redis exige REDIS_URL.')
+
+  // Le store mémoire est le défaut de mppx, et il a deux angles morts :
+  // il n'est pas partagé entre processus, et il est perdu au redémarrage —
+  // un Credential redevient alors rejouable. On l'autorise, mais jamais
+  // par accident. Voir docs/features/anti-rejeu.md.
+  if (replayStore === 'memory' && env['REPLAY_STORE_MEMORY_ACK'] !== 'i-know')
+    throw new ConfigError(
+      'REPLAY_STORE=memory n’est pas partagé entre processus et ne survit pas ' +
+        'à un redémarrage : un Credential y redevient rejouable. ' +
+        'Utilisez sqlite ou redis, ou posez REPLAY_STORE_MEMORY_ACK=i-know.',
+    )
+
   const portRaw = env['PORT'] ?? '8787'
   const port = Number(portRaw)
   if (!Number.isInteger(port) || port < 1 || port > 65535)
@@ -84,5 +119,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     port,
     searchPrice,
     ledgerPath: env['LEDGER_PATH'] ?? 'data/ledger.sqlite',
+    replayStore,
+    replayStorePath: env['REPLAY_STORE_PATH'] ?? 'data/replay.sqlite',
+    redisUrl,
+    analyzePrice,
   }
 }
