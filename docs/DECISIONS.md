@@ -242,3 +242,28 @@ ou un Credential. Le modèle reçoit un `search-unavailable` générique.
 
 **Conséquence** : un test balaie tous les messages transmis et y cherche tout
 motif `0x` + 64 hex, tout `Authorization`, tout Credential.
+
+---
+
+## D18 — L'e2e vérifie les fonds, pas seulement le Receipt
+**Phase 5**
+
+Un Receipt est déclaratif : le serveur affirme que le paiement a eu lieu. Le
+test relit donc le solde pathUSD du destinataire **avant et après**, et exige
+un delta exactement égal au prix — puis confirme la transaction par
+`eth_getTransactionReceipt`.
+
+**Conséquence** : payeur et destinataire sont deux comptes distincts
+(`agent` et `provider`), sinon le delta ne prouverait rien.
+
+---
+
+## D19 — Les tests qui dépensent sont isolés et auto-ignorés
+**Phase 5**
+
+`*.e2e.test.ts` est exclu de `npm test` et lancé par `npm run test:e2e`. En
+l'absence de `AGENT_PRIVATE_KEY`, le test s'ignore au lieu d'échouer.
+
+**Conséquence** : la CI ne dépense rien et ne casse pas faute de wallet.
+`loadDotEnv` reste cantonné aux tests e2e : les tests unitaires ne dépendent
+d'aucun secret ni d'aucun fichier local, et ne doivent pas commencer à le faire.

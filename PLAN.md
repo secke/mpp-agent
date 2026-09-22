@@ -151,20 +151,24 @@ libérée.
 
 ---
 
-## Phase 5 — E2E testnet réel
+## Phase 5 — E2E testnet réel ✅ **terminée**
 
 **Branche** : `phase-5-e2e-testnet`
 
 **Objectif** : un vrai paiement on-chain sur Moderato.
 
-- [ ] Compte financé via `npx mppx account fund --network testnet`
-- [ ] Test e2e : agent → serveur → transfert pathUSD réel → `Payment-Receipt`
-- [ ] Vérification du hash de transaction sur le RPC
+- [x] Comptes `agent` (payeur, financé) et `provider` (destinataire)
+- [x] `tests/e2e/payment.e2e.test.ts` : agent → serveur → transfert pathUSD
+      réel → `Payment-Receipt`
+- [x] Vérification du hash de transaction sur le RPC **et** du delta de solde
 
 **Critères de sortie**
-- test marqué `e2e`, **exclu du run par défaut** (nécessite un wallet financé)
-- le `reference` du Receipt correspond à une transaction confirmée sur 42431
-- anti-rejeu prouvé : rejouer le même Credential → 402
+- [x] test `*.e2e.test.ts` exclu de `npm test`, lancé par `npm run test:e2e`,
+      auto-ignoré sans `AGENT_PRIVATE_KEY`
+- [x] le `reference` du Receipt correspond à une transaction confirmée sur 42431
+      (bloc 36470584, `status: 0x1`)
+- [x] le solde du destinataire augmente **exactement** du prix (+0,50 pathUSD)
+- [x] anti-rejeu prouvé : le Credential capturé et rejoué → **402**
 
 ---
 
