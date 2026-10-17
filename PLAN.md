@@ -189,16 +189,17 @@ endpoint du processus agent (voir `docs/features/observabilite.md`).
 
 ---
 
-## Phase 7 — Docker Compose
+## Phase 7 — Docker Compose ✅ **terminée** (une réserve)
 
 **Branche** : `phase-7-docker`
 
-- [ ] `Dockerfile` (multi-stage, non-root), `compose.yml` : server + agent +
+- [x] `Dockerfile` (multi-stage, non-root), `compose.yml` : server + agent +
       Prometheus
-- [ ] Secrets injectés par l'environnement, jamais dans l'image
+- [x] Secrets injectés par l'environnement, jamais dans l'image
 
 **Critères de sortie** : `docker compose up` → `/healthz` et `/metrics`
-répondent ; `docker history` ne révèle aucun secret.
+répondent ; `docker history` ne révèle aucun secret. ✅ (`/metrics` exige
+le jeton). ⚠️ Service `agent` non lancé (clés requises).
 
 ---
 

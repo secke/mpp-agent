@@ -17,7 +17,7 @@ pourquoi, comment s'en servir, où est le code, comment c'est testé.
 | [Anti-rejeu — stores partagés](anti-rejeu.md) | 8 | ✅ livré |
 | [Durcissement — corps, cache, revue](durcissement.md) | 8 | ✅ livré |
 | [Observabilité Prometheus](observabilite.md) | 6 | ✅ |
-| Docker Compose | 7 | ⏳ à venir |
+| [Docker Compose](docker.md) | 7 | ✅ |
 
 Référence protocole : [`../NOTES.md`](../NOTES.md).
 Décisions d'architecture : [`../DECISIONS.md`](../DECISIONS.md).
