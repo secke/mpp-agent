@@ -22,8 +22,9 @@ reçoit un `Metrics` (`observability/metrics.ts`).
   (l'en-tête est testé, jamais lu).
 
 ## Limites
-- `/metrics` est public, comme `/healthz` : à restreindre au réseau interne
-  (phase 7, Compose).
+- `/metrics` exige `Authorization: Bearer $METRICS_TOKEN` (≥ 16 car.) ; sans
+  `METRICS_TOKEN`, la route n'existe pas (404, fail-closed). Prévoir en plus un
+  réseau interne en phase 7.
 - Les gauges de l'agent (`attachAgent`) lisent le `BudgetGuard` du **même
   processus**. L'agent tourne dans un processus distinct du serveur : son
   exposition HTTP propre reste à câbler en phase 7.

@@ -36,6 +36,8 @@ export type Config = {
   readonly redisUrl: string | undefined
   /** Prix d'un appel à /v1/analyze (route POST, corps lié par digest). */
   readonly analyzePrice: string
+  /** Jeton bearer de `/metrics`. Absent : l'export est désactivé. */
+  readonly metricsToken?: string | undefined
 }
 
 export const REPLAY_STORES = ['memory', 'sqlite', 'redis'] as const
@@ -83,6 +85,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
         `Attendu : un montant lisible, max ${TOKEN_DECIMALS} décimales (ex. "0.50").`,
     )
 
+  const metricsToken = env['METRICS_TOKEN'] || undefined
+  if (metricsToken !== undefined && metricsToken.length < 16)
+    throw new ConfigError('METRICS_TOKEN doit faire au moins 16 caractères.')
+
   const analyzePrice = env['MPP_ANALYZE_PRICE'] ?? '1.00'
   if (!AMOUNT_RE.test(analyzePrice))
     throw new ConfigError(`MPP_ANALYZE_PRICE invalide : "${analyzePrice}".`)
@@ -123,5 +129,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     replayStorePath: env['REPLAY_STORE_PATH'] ?? 'data/replay.sqlite',
     redisUrl,
     analyzePrice,
+    metricsToken,
   }
 }

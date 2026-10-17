@@ -12,6 +12,7 @@
  *   x-payment-info extensions »), helper `discovery(app, mppx, …)` de mppx/hono.
  */
 import { Hono } from 'hono'
+import { bearerAuth } from 'hono/bearer-auth'
 import { BodyDigest, Credential } from 'mppx'
 import { discovery } from 'mppx/hono'
 
@@ -57,8 +58,10 @@ export function createApp(
       c.res.headers.set('Cache-Control', 'private')
   })
 
-  if (metrics)
-    app.get('/metrics', async (c) =>
+  // Fail-closed : sans `metricsToken`, la route n'existe pas (404).
+  // Le jeton est comparé en temps constant et n'est jamais journalisé.
+  if (metrics && config.metricsToken)
+    app.get('/metrics', bearerAuth({ token: config.metricsToken }), async (c) =>
       c.body(await metrics.render(), 200, { 'Content-Type': metrics.contentType }),
     )
 

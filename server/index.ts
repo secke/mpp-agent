@@ -32,8 +32,9 @@ if (config.ledgerPath !== ':memory:') mkdirSync(dirname(config.ledgerPath), { re
 const ledger = new Ledger(openLedger(config.ledgerPath))
 attachLedger(payment, ledger)
 
-const metrics = createMetrics()
-metrics.attach(payment)
+// Export désactivé sans METRICS_TOKEN (voir server/app.ts).
+const metrics = config.metricsToken ? createMetrics() : undefined
+metrics?.attach(payment)
 
 const app = createApp(config, payment, metrics)
 
