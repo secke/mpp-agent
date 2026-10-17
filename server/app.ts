@@ -4,6 +4,7 @@
  * Routes :
  *   GET /healthz       — gratuit, sonde de vivacité
  *   GET /v1/search     — payant (intent `charge`)
+ *   GET /metrics       — gratuit, export Prometheus (si métriques fournies)
  *   GET /openapi.json  — document de découverte, généré par mppx
  *
  * Source découverte : https://mpp.dev/advanced/discovery
@@ -14,13 +15,33 @@ import { Hono } from 'hono'
 import { BodyDigest, Credential } from 'mppx'
 import { discovery } from 'mppx/hono'
 
+import type { Metrics } from '../observability/metrics.ts'
 import { analyze } from './analyze.ts'
 import type { Config } from './config.ts'
 import { createPayment, type Payment } from './payment.ts'
 import { search } from './search.ts'
 
-export function createApp(config: Config, payment: Payment = createPayment(config)) {
+export function createApp(
+  config: Config,
+  payment: Payment = createPayment(config),
+  metrics?: Metrics,
+) {
   const app = new Hono()
+
+  // Latence de règlement : seules les requêtes portant un Credential
+  // (`Authorization: Payment …`) sont chronométrées. L'en-tête n'est que testé,
+  // jamais lu ni journalisé.
+  if (metrics)
+    app.use('*', async (c, next) => {
+      const paid = c.req.header('Authorization')?.startsWith('Payment ') === true
+      const start = performance.now()
+      await next()
+      if (paid)
+        metrics.settlement.observe(
+          { status: c.res.status === 200 ? 'success' : 'failed' },
+          (performance.now() - start) / 1000,
+        )
+    })
 
   /**
    * Une réponse 200 porteuse d'un Receipt ne doit pas être mise en cache par
@@ -35,6 +56,11 @@ export function createApp(config: Config, payment: Payment = createPayment(confi
     if (c.res.status === 200 && c.res.headers.has('Payment-Receipt'))
       c.res.headers.set('Cache-Control', 'private')
   })
+
+  if (metrics)
+    app.get('/metrics', async (c) =>
+      c.body(await metrics.render(), 200, { 'Content-Type': metrics.contentType }),
+    )
 
   app.get('/healthz', (c) => c.json({ status: 'ok', realm: config.realm }))
 

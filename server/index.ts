@@ -11,6 +11,7 @@ import { dirname } from 'node:path'
 
 import { attachLedger, Ledger } from '../ledger/record.ts'
 import { openLedger } from '../ledger/db.ts'
+import { createMetrics } from '../observability/metrics.ts'
 import { createApp } from './app.ts'
 import { createReplayStore } from './bootstrap.ts'
 import { loadConfig } from './config.ts'
@@ -31,7 +32,10 @@ if (config.ledgerPath !== ':memory:') mkdirSync(dirname(config.ledgerPath), { re
 const ledger = new Ledger(openLedger(config.ledgerPath))
 attachLedger(payment, ledger)
 
-const app = createApp(config, payment)
+const metrics = createMetrics()
+metrics.attach(payment)
+
+const app = createApp(config, payment, metrics)
 
 serve({ fetch: app.fetch, port: config.port }, ({ port }) => {
   console.log(`provider MPP à l'écoute sur http://localhost:${port}`)

@@ -172,17 +172,20 @@ libérée.
 
 ---
 
-## Phase 6 — Observabilité Prometheus
+## Phase 6 — Observabilité Prometheus ✅ **terminée** (une réserve)
 
 **Branche** : `phase-6-observabilite`
 
-- [ ] `/metrics` : challenges émis, paiements réussis/échoués, latence de
+- [x] `/metrics` : challenges émis, paiements réussis/échoués, latence de
       règlement, dépense cumulée de l'agent
-- [ ] Labels sûrs uniquement (method, intent, status) — jamais d'identifiant
+- [x] Labels sûrs uniquement (method, intent, status) — jamais d'identifiant
       de paiement ni de montant nominatif
 
 **Critères de sortie** : test qui assert la présence des séries et
-**l'absence** de toute valeur sensible dans l'export.
+**l'absence** de toute valeur sensible dans l'export. ✅ (4 tests)
+
+⚠️ Réserve : les gauges de l'agent ne sont pas encore exposées par un
+endpoint du processus agent (voir `docs/features/observabilite.md`).
 
 ---
 
