@@ -37,11 +37,11 @@ afterAll(async () => {
 })
 
 /**
- * Contrat commun. Tout store anti-rejeu doit passer ces tests, quel que soit
- * son support — c'est ce qui rend les implémentations interchangeables.
+ * Common contract. Every replay store must pass these tests, whatever its
+ * backend — this is what makes the implementations interchangeable.
  */
 function contract(name: string, make: () => AnyStore, enabled = true) {
-  describe.skipIf(!enabled)(`contrat AtomicStore — ${name}`, () => {
+  describe.skipIf(!enabled)(`AtomicStore contract — ${name}`, () => {
     let store: AnyStore
     let n = 0
     const key = () => `mppx:charge:${name}:${Date.now()}:${++n}`
@@ -50,24 +50,24 @@ function contract(name: string, make: () => AnyStore, enabled = true) {
       store = make()
     })
 
-    it('rend null pour une clé absente', async () => {
+    it('returns null for an absent key', async () => {
       await expect(store.get(key())).resolves.toBeNull()
     })
 
-    it('écrit puis relit une valeur', async () => {
+    it('writes then reads back a value', async () => {
       const k = key()
       await store.put(k, { a: 1 })
       await expect(store.get(k)).resolves.toEqual({ a: 1 })
     })
 
-    it('supprime une clé', async () => {
+    it('deletes a key', async () => {
       const k = key()
       await store.put(k, { a: 1 })
       await store.delete(k)
       await expect(store.get(k)).resolves.toBeNull()
     })
 
-    it('update applique set, noop et delete', async () => {
+    it('update applies set, noop and delete', async () => {
       const k = key()
       const set = await store.update(k, () => ({ op: 'set', value: { n: 1 }, result: 'ecrit' }))
       expect(set).toBe('ecrit')
@@ -80,20 +80,20 @@ function contract(name: string, make: () => AnyStore, enabled = true) {
       await expect(store.get(k)).resolves.toBeNull()
     })
 
-    it('update voit la valeur courante', async () => {
+    it('update sees the current value', async () => {
       const k = key()
       await store.put(k, { n: 1 })
       const seen = await store.update(k, (current) => ({ op: 'noop', result: current }))
       expect(seen).toEqual({ n: 1 })
     })
 
-    // ── Le cœur de l'anti-rejeu ──────────────────────────────────────
-    // `tryClaim` renvoie `MaybePromise<boolean>` : le store mémoire de mppx
-    // répond de façon synchrone. On normalise plutôt que de supposer.
+    // ── The heart of replay protection ───────────────────────────────
+    // `tryClaim` returns `MaybePromise<boolean>`: the mppx memory store
+    // answers synchronously. We normalize rather than assume.
     const claim = (k: string, expires: number) =>
       Promise.resolve(Store.tryClaim(store, k, expires))
 
-    it('tryClaim réussit une fois et une seule', async () => {
+    it('tryClaim succeeds once and only once', async () => {
       const k = key()
       const expires = Date.now() + 60_000
       expect(await claim(k, expires)).toBe(true)
@@ -101,7 +101,7 @@ function contract(name: string, make: () => AnyStore, enabled = true) {
       expect(await claim(k, expires)).toBe(false)
     })
 
-    it('tryClaim est sûr en concurrence : un seul gagnant', async () => {
+    it('tryClaim is concurrency-safe: a single winner', async () => {
       const k = key()
       const expires = Date.now() + 60_000
       const results = await Promise.all(
@@ -110,17 +110,17 @@ function contract(name: string, make: () => AnyStore, enabled = true) {
       expect(results.filter(Boolean)).toHaveLength(1)
     })
 
-    it('tryClaim redevient possible une fois le marqueur expiré', async () => {
+    it('tryClaim becomes possible again once the marker has expired', async () => {
       const k = key()
-      // TTL court et réel, puis on attend qu'il s'écoule. Un `expires` déjà
-      // dans le passé ne prouverait rien : chaque support le clampe à sa façon.
+      // Short, real TTL, then we wait for it to elapse. An `expires` already in
+      // the past would prove nothing: each backend clamps it its own way.
       expect(await claim(k, Date.now() + 60)).toBe(true)
       expect(await claim(k, Date.now() + 60_000)).toBe(false)
       await new Promise((resolve) => setTimeout(resolve, 150))
       expect(await claim(k, Date.now() + 60_000)).toBe(true)
     })
 
-    it('isole les clés les unes des autres', async () => {
+    it('isolates keys from one another', async () => {
       const a = key()
       const b = key()
       expect(await claim(a, Date.now() + 60_000)).toBe(true)
@@ -129,32 +129,32 @@ function contract(name: string, make: () => AnyStore, enabled = true) {
   })
 }
 
-contract('memory (défaut mppx)', () => Store.memory() as AnyStore)
+contract('memory (mppx default)', () => Store.memory() as AnyStore)
 contract('sqlite', () => sqliteStore(join(dir, 'replay.sqlite')))
 contract('redis', () => redisStore(redisClient!), hasRedis)
 
-describe('sqlite — les angles morts du store mémoire', () => {
-  it('survit au redémarrage : un Credential ne redevient pas rejouable', async () => {
+describe('sqlite — the blind spots of the memory store', () => {
+  it('survives a restart: a Credential does not become replayable', async () => {
     const path = join(dir, 'durable.sqlite')
     const key = 'mppx:charge:durable'
     const expires = Date.now() + 60_000
 
     const first = sqliteStore(path)
     expect(await first.tryClaim!(key, expires)).toBe(true)
-    first.close() // le processus s'arrête
+    first.close() // the process stops
 
-    const second = sqliteStore(path) // il redémarre
+    const second = sqliteStore(path) // it restarts
     expect(await second.tryClaim!(key, expires)).toBe(false)
     second.close()
   })
 
-  it('est partagé entre connexions : deux instances voient le même marqueur', async () => {
-    const path = join(dir, 'partage.sqlite')
-    const key = 'mppx:charge:partage'
+  it('is shared between connections: two instances see the same marker', async () => {
+    const path = join(dir, 'shared.sqlite')
+    const key = 'mppx:charge:shared'
     const expires = Date.now() + 60_000
 
     const a = sqliteStore(path)
-    const b = sqliteStore(path) // simule un second processus
+    const b = sqliteStore(path) // simulates a second process
 
     expect(await a.tryClaim!(key, expires)).toBe(true)
     expect(await b.tryClaim!(key, expires)).toBe(false)
@@ -163,14 +163,14 @@ describe('sqlite — les angles morts du store mémoire', () => {
     b.close()
   })
 
-  it('le store mémoire, lui, ne partage rien', async () => {
-    const key = 'mppx:charge:memoire'
+  it('the memory store, by contrast, shares nothing', async () => {
+    const key = 'mppx:charge:memory-store'
     const expires = Date.now() + 60_000
     const a = Store.memory() as AnyStore
     const b = Store.memory() as AnyStore
 
     expect(await Promise.resolve(Store.tryClaim(a, key, expires))).toBe(true)
-    // Le même Credential passe une seconde fois sur l'autre instance.
+    // The same Credential goes through a second time on the other instance.
     expect(await Promise.resolve(Store.tryClaim(b, key, expires))).toBe(true)
   })
 })

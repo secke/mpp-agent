@@ -1,12 +1,12 @@
 /**
- * Exposition `/metrics` du processus agent.
+ * `/metrics` exposure of the agent process.
  *
- * L'agent est une commande à exécution courte : on sert l'export pendant le
- * run, puis on le maintient `lingerMs` après la fin pour laisser à Prometheus
- * le temps d'un scrape (voir docs/features/observabilite.md).
+ * The agent is a short-lived command: we serve the export during the run,
+ * then keep it up for `lingerMs` after it ends to give Prometheus time for a
+ * scrape (see docs/features/observability.md).
  *
- * Même règle que le serveur : jeton bearer obligatoire (fail-closed), aucun
- * label sensible — les séries viennent de `observability/metrics.ts`.
+ * Same rule as the server: bearer token required (fail-closed), no sensitive
+ * label — the series come from `observability/metrics.ts`.
  */
 import { serve, type ServerType } from '@hono/node-server'
 import { Hono } from 'hono'

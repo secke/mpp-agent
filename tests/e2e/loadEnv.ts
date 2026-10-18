@@ -1,11 +1,11 @@
 import { existsSync, readFileSync } from 'node:fs'
 
 /**
- * Charge `.env` dans `process.env` pour les tests e2e.
+ * Loads `.env` into `process.env` for the e2e tests.
  *
- * Vitest n'applique pas `--env-file` de Node. On fait donc la lecture ici,
- * uniquement pour les tests e2e — les tests unitaires n'ont besoin d'aucun
- * secret et ne doivent pas dépendre d'un fichier local.
+ * Vitest does not apply Node's `--env-file`. We therefore do the reading here,
+ * for the e2e tests only — unit tests need no secret and must not depend on
+ * a local file.
  */
 export function loadDotEnv(path = '.env'): void {
   if (!existsSync(path)) return

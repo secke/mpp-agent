@@ -5,8 +5,8 @@ import { PATH_USD, TESTNET_CHAIN_ID } from '../../server/config.ts'
 import { assertTestnetChallenge, createPayment, selfCheck } from '../../server/payment.ts'
 import { TEST_CONFIG } from '../helpers.ts'
 
-describe('garde-fou testnet', () => {
-  it("émet un Challenge ancré sur Moderato, pas sur le réseau principal", async () => {
+describe('testnet guard', () => {
+  it("issues a Challenge anchored on Moderato, not the main network", async () => {
     const payment = createPayment(TEST_CONFIG)
     const challenge = await payment.challenge.tempo.charge({ amount: '0.50' })
     const request = challenge.request as { currency: string; methodDetails: { chainId: number } }
@@ -15,20 +15,20 @@ describe('garde-fou testnet', () => {
     expect(request.currency.toLowerCase()).toBe(PATH_USD)
   })
 
-  it('convertit le montant lisible en unités de base (6 décimales)', async () => {
+  it('converts the readable amount to base units (6 decimals)', async () => {
     const payment = createPayment(TEST_CONFIG)
     const challenge = await payment.challenge.tempo.charge({ amount: '0.50' })
     expect((challenge.request as { amount: string }).amount).toBe('500000')
   })
 
-  it('selfCheck passe sur une configuration correcte', async () => {
+  it('selfCheck passes on a correct configuration', async () => {
     const payment = createPayment(TEST_CONFIG)
     await expect(selfCheck(payment, TEST_CONFIG)).resolves.toBeUndefined()
   })
 
-  it('assertTestnetChallenge rejette un Challenge mainnet', () => {
+  it('assertTestnetChallenge rejects a mainnet Challenge', () => {
     const mainnet = Challenge.from({
-      id: 'faux-challenge',
+      id: 'fake-challenge',
       realm: 'api.test',
       method: 'tempo',
       intent: 'charge',
@@ -42,9 +42,9 @@ describe('garde-fou testnet', () => {
     expect(() => assertTestnetChallenge(mainnet)).toThrow(/chainId=4217/)
   })
 
-  it('assertTestnetChallenge rejette une devise inattendue sur le bon réseau', () => {
+  it('assertTestnetChallenge rejects an unexpected currency on the right network', () => {
     const wrongCurrency = Challenge.from({
-      id: 'faux-challenge-2',
+      id: 'fake-challenge-2',
       realm: 'api.test',
       method: 'tempo',
       intent: 'charge',
@@ -58,7 +58,7 @@ describe('garde-fou testnet', () => {
     expect(() => assertTestnetChallenge(wrongCurrency)).toThrow(/pathUSD/)
   })
 
-  it('refuse un secret de moins de 32 octets', () => {
-    expect(() => createPayment({ ...TEST_CONFIG, secretKey: 'court' })).toThrow(/32 bytes/)
+  it('refuses a secret shorter than 32 bytes', () => {
+    expect(() => createPayment({ ...TEST_CONFIG, secretKey: 'short' })).toThrow(/32 bytes/)
   })
 })

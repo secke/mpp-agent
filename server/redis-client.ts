@@ -1,11 +1,11 @@
 /**
- * Client Redis minimal (protocole RESP sur TCP), sans dépendance.
+ * Minimal Redis client (RESP protocol over TCP), dependency-free.
  *
- * Quatre commandes suffisent à l'anti-rejeu : GET, SET, DEL et
- * `SET key value NX PX ttl` — cette dernière étant atomique côté serveur,
- * c'est elle qui porte la garantie.
+ * Four commands are enough for replay protection: GET, SET, DEL and
+ * `SET key value NX PX ttl` — the latter is atomic on the server side and
+ * carries the guarantee.
  *
- * RESP : https://redis.io/docs/latest/develop/reference/protocol-spec/
+ * RESP: https://redis.io/docs/latest/develop/reference/protocol-spec/
  */
 import { createConnection, type Socket } from 'node:net'
 
@@ -15,7 +15,7 @@ export class RedisError extends Error {
 
 type Reply = string | null | number
 
-/** Encode une commande en RESP (tableau de chaînes en vrac). */
+/** Encodes a command as RESP (bulk-string array). */
 function encode(args: readonly string[]): string {
   let out = `*${args.length}\r\n`
   for (const arg of args) out += `$${Buffer.byteLength(arg)}\r\n${arg}\r\n`
@@ -41,7 +41,7 @@ export async function connectRedis(url: string): Promise<RedisClient> {
   })
   socket.setNoDelay(true)
 
-  // Les commandes sont sérialisées : une réponse à la fois, dans l'ordre.
+  // Commands are serialized: one reply at a time, in order.
   let queue: Promise<unknown> = Promise.resolve()
   let buffer = ''
 
@@ -51,7 +51,7 @@ export async function connectRedis(url: string): Promise<RedisClient> {
         const onData = (chunk: Buffer) => {
           buffer += chunk.toString('utf8')
           const parsed = parseReply(buffer)
-          if (parsed === undefined) return // réponse incomplète
+          if (parsed === undefined) return // incomplete reply
           buffer = parsed.rest
           cleanup()
           if (parsed.error) reject(new RedisError(parsed.error))
@@ -86,7 +86,7 @@ export async function connectRedis(url: string): Promise<RedisClient> {
       return await send(['DEL', key])
     },
     async setNxPx(key, value, ttlMs) {
-      // Renvoie OK si la clé a été posée, nil si elle existait déjà.
+      // Returns OK if the key was set, nil if it already existed.
       return (await send(['SET', key, value, 'NX', 'PX', String(Math.ceil(ttlMs))])) !== null
     },
     async close() {
@@ -95,7 +95,7 @@ export async function connectRedis(url: string): Promise<RedisClient> {
   }
 }
 
-/** Analyse une réponse RESP. `undefined` = il manque des octets. */
+/** Parses a RESP reply. `undefined` = bytes are missing. */
 function parseReply(
   input: string,
 ): { value: Reply; error?: string; rest: string } | undefined {
@@ -120,6 +120,6 @@ function parseReply(
       return { value: rest.slice(0, length), rest: rest.slice(length + 2) }
     }
     default:
-      return { value: null, error: `réponse RESP inattendue : ${head}`, rest }
+      return { value: null, error: `unexpected RESP reply: ${head}`, rest }
   }
 }

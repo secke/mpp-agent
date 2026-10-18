@@ -1,21 +1,22 @@
 /**
- * Boucle d'agent : le modèle raisonne, appelle des outils, et conclut.
+ * Agent loop: the model reasons, calls tools, and concludes.
  *
- * Garde-fous de la boucle elle-même (indépendants du budget guard) :
- *  - `maxTurns` borne le nombre d'aller-retours avec le modèle ;
- *  - `maxToolCalls` borne le nombre total d'achats tentés ;
- *  - un refus terminal du guard coupe les outils pour le tour suivant, afin
- *    que le modèle conclue au lieu de boucler sur un achat impossible.
+ * Guardrails of the loop itself (independent of the budget guard):
+ *  - `maxTurns` bounds the number of round-trips with the model;
+ *  - `maxToolCalls` bounds the total number of purchases attempted;
+ *  - a terminal guard refusal disables the tools for the next turn, so the
+ *    model concludes instead of looping on an impossible purchase.
  */
 import type { AssistantTurn, LlmClient, LlmMessage, ToolSpec } from './llm.ts'
 import { SEARCH_TOOL, type ToolResult } from './tools.ts'
 
 export const DEFAULT_SYSTEM_PROMPT = [
-  'Tu es un agent de recherche. Tu disposes d’un outil payant pour interroger',
-  'une place de marché documentaire : chaque appel dépense du budget réel.',
-  'Utilise-le avec parcimonie, uniquement quand la question l’exige.',
-  'Si un appel est refusé pour cause de budget, n’insiste pas : réponds avec',
-  'ce que tu sais et signale explicitement la limite rencontrée.',
+  'You are a research agent. You have a paid tool to query a document',
+  'marketplace: every call spends real budget.',
+  'Use it sparingly, only when the question requires it.',
+  'If a call is refused because of budget, do not insist: answer with',
+  'what you know and explicitly mention the limit you hit.',
+  'Answer in the language of the question.',
 ].join(' ')
 
 export type AgentStep = {
@@ -24,11 +25,11 @@ export type AgentStep = {
 }
 
 export type AgentRun = {
-  /** Réponse finale du modèle, ou `null` s'il n'a pas conclu. */
+  /** Final answer from the model, or `null` if it did not conclude. */
   readonly answer: string | null
   readonly steps: readonly AgentStep[]
   readonly turns: number
-  /** Pourquoi la boucle s'est arrêtée. */
+  /** Why the loop stopped. */
   readonly stopReason: 'completed' | 'max-turns' | 'max-tool-calls'
   readonly messages: readonly LlmMessage[]
 }
@@ -71,7 +72,7 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentRun> {
       ...(reply.toolCalls.length ? { toolCalls: reply.toolCalls } : {}),
     })
 
-    // Le modèle a conclu.
+    // The model has concluded.
     if (reply.toolCalls.length === 0)
       return { answer: reply.content, steps, turns: turn, stopReason: 'completed', messages }
 
@@ -82,8 +83,8 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentRun> {
       const result = await execute(call)
       steps.push({ call, result })
 
-      // Un refus non réessayable coupe l'outil : sans ça, le modèle peut
-      // reproposer le même achat jusqu'à épuiser `maxTurns` pour rien.
+      // A non-retryable refusal disables the tool: without this, the model may
+      // re-propose the same purchase until it exhausts `maxTurns` for nothing.
       if (!result.ok && !result.retryable) toolsDisabled = true
 
       messages.push({

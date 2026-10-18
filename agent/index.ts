@@ -1,9 +1,9 @@
 /**
- * Point d'entrée de démonstration : le modèle décide lui-même s'il achète
- * une recherche sur la place de marché.
+ * Demo entry point: the model decides by itself whether to buy a search
+ * on the marketplace.
  *
- * Lancement : `npm run agent -- "ta question"`
- * (le provider doit tourner : `npm run dev`)
+ * Run with: `npm run agent -- "your question"`
+ * (the provider must be running: `npm run dev`)
  */
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 
@@ -17,19 +17,19 @@ import { runAgent } from './loop.ts'
 import { createToolExecutor } from './tools.ts'
 import { loadAgentConfig } from './wallet.ts'
 
-// Export Prometheus optionnel : actif seulement avec AGENT_METRICS_PORT *et*
-// METRICS_TOKEN (≥ 16 car.). Sans jeton, rien n'est exposé.
+// Optional Prometheus export: only active with AGENT_METRICS_PORT *and*
+// METRICS_TOKEN (≥ 16 chars). Without a token, nothing is exposed.
 const metricsPort = Number(process.env['AGENT_METRICS_PORT'] ?? 0)
 const metricsToken = process.env['METRICS_TOKEN'] ?? ''
 const question = process.argv.slice(2).join(' ').trim()
 if (!question) {
-  console.error('Usage : npm run agent -- "ta question"')
+  console.error('Usage: npm run agent -- "your question"')
   process.exit(2)
 }
 
-// Sans clé configurée, on fabrique un compte éphémère : la boucle complète
-// reste démontrable (le refus de budget, la conclusion du modèle), mais aucun
-// paiement ne peut aboutir faute de fonds.
+// With no key configured, we make up an ephemeral account: the full loop
+// remains demonstrable (the budget refusal, the model's conclusion), but no
+// payment can succeed for lack of funds.
 let ephemeral = false
 if (!process.env['AGENT_PRIVATE_KEY']) {
   process.env['AGENT_PRIVATE_KEY'] = generatePrivateKey()
@@ -61,13 +61,13 @@ const metricsServer =
       })()
     : undefined
 
-console.log(`modèle    : ${llmConfig.model} (${llmConfig.baseUrl})`)
-console.log(`payeur    : ${agent.account.address}${ephemeral ? '  ⚠️ éphémère, non financé' : ''}`)
+console.log(`model    : ${llmConfig.model} (${llmConfig.baseUrl})`)
+console.log(`payer    : ${agent.account.address}${ephemeral ? '  ⚠️ ephemeral, unfunded' : ''}`)
 console.log(
-  `budget    : ${fromBaseUnits(agent.limits.maxPerCall, 6)} / appel, ` +
-    `${fromBaseUnits(agent.limits.totalBudget, 6)} au total`,
+  `budget   : ${fromBaseUnits(agent.limits.maxPerCall, 6)} / call, ` +
+    `${fromBaseUnits(agent.limits.totalBudget, 6)} total`,
 )
-console.log(`question  : ${question}\n`)
+console.log(`question : ${question}\n`)
 
 const run = await runAgent({
   llm: createLlm(llmConfig),
@@ -76,18 +76,18 @@ const run = await runAgent({
 })
 
 for (const step of run.steps) {
-  const verdict = step.result.ok ? '✓ payé' : `✗ ${step.result.code}`
-  console.log(`outil     : ${step.call.name}(${step.call.arguments}) → ${verdict}`)
+  const verdict = step.result.ok ? '✓ paid' : `✗ ${step.result.code}`
+  console.log(`tool     : ${step.call.name}(${step.call.arguments}) → ${verdict}`)
 }
 
-console.log(`\nréponse   : ${run.answer ?? '(le modèle n’a pas conclu)'}`)
-console.log(`arrêt     : ${run.stopReason} en ${run.turns} tour(s)`)
-console.log(`dépense   : ${guard.snapshot().committed} / reste ${guard.snapshot().remaining}`)
+console.log(`\nanswer   : ${run.answer ?? '(the model did not conclude)'}`)
+console.log(`stopped  : ${run.stopReason} after ${run.turns} turn(s)`)
+console.log(`spent    : ${guard.snapshot().committed} / remaining ${guard.snapshot().remaining}`)
 
-// Laisse Prometheus scraper l'état final avant de quitter.
+// Let Prometheus scrape the final state before exiting.
 if (metricsServer) {
   const linger = Number(process.env['AGENT_METRICS_LINGER'] ?? 30)
-  console.log(`métriques : :${metricsServer.port}/metrics maintenues ${linger}s`)
+  console.log(`metrics  : :${metricsServer.port}/metrics kept up for ${linger}s`)
   await new Promise((r) => setTimeout(r, linger * 1000))
   await metricsServer.close()
 }

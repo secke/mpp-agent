@@ -1,324 +1,352 @@
-# DECISIONS — journal des décisions d'architecture
+# DECISIONS — architecture decision log
 
-Format : une décision = contexte, choix, conséquence. Les décisions issues de
-la phase 0 sont sourcées dans `docs/NOTES.md`.
-
----
-
-## D1 — SDK `mppx` (TypeScript) plutôt que `pympp` (Python)
-**Phase 0 · révisée après changement de stack**
-
-`CLAUDE.md` annonçait « SDK mppx officiel (Python) ». C'était contradictoire :
-`mppx` est le SDK **TypeScript**, le SDK Python s'appelle `pympp`. Le projet a
-basculé en TypeScript, ce qui rend `mppx` correct.
-
-**Conséquence** : stack Node ≥ 20 / ESM. Toutes les limites de `pympp`
-(pas de `session`, pas de `subscription`, pas de `proof`, pas de proxy)
-disparaissent — voir NOTES §6.
+Format: one decision = context, choice, consequence. Decisions coming from
+phase 0 are sourced in `docs/NOTES.md`.
 
 ---
 
-## D2 — Hono comme framework serveur
+## D1 — `mppx` (TypeScript) SDK rather than `pympp` (Python)
+**Phase 0 · revised after the stack change**
+
+`CLAUDE.md` announced "official mppx SDK (Python)". That was contradictory:
+`mppx` is the **TypeScript** SDK, the Python SDK is called `pympp`. The project
+switched to TypeScript, which makes `mppx` correct.
+
+**Consequence**: Node ≥ 20 / ESM stack. All the limits of `pympp`
+(no `session`, no `subscription`, no `proof`, no proxy) disappear — see NOTES §6.
+
+---
+
+## D2 — Hono as the server framework
 **Phase 1**
 
-`mppx` fournit des adaptateurs natifs pour Elysia, Express, Hono et Next.js.
-Hono est le plus proche de FastAPI (léger, typé, middleware par route) et son
-`app.request()` permet de tester l'application en mémoire, sans ouvrir de port.
+`mppx` provides native adapters for Elysia, Express, Hono and Next.js.
+Hono is the closest to FastAPI (light, typed, per-route middleware) and its
+`app.request()` lets the application be tested in memory, without opening a
+port.
 
-**Conséquence** : les tests de la phase 1 exercent le vrai pipeline HTTP sans
-réseau. `@hono/node-server` n'est utilisé qu'au point d'entrée.
-
----
-
-## D3 — `testnet: true`, jamais `chainId` seul
-**Phase 0 · mesurée**
-
-Mesure de phase 0 (NOTES §4.1) : `tempo.charge({ chainId: 42431 })` émet un
-Challenge annonçant `chainId: 4217` (**mainnet**) avec une devise testnet.
-`mppx.charge({ chainId })` au niveau route produit l'incohérence inverse.
-Seul `testnet: true` aligne chaîne et devise.
-
-**Conséquence** : `testnet: true` est le seul réglage autorisé, doublé de deux
-garde-fous (`MPP_NETWORK` au chargement, `assertTestnetChallenge` à l'exécution)
-et d'un auto-test au démarrage. Le coût d'une erreur ici, c'est de l'argent réel.
+**Consequence**: phase 1 tests exercise the real HTTP pipeline without a
+network. `@hono/node-server` is only used at the entry point.
 
 ---
 
-## D4 — Deux garde-fous plutôt qu'un
+## D3 — `testnet: true`, never `chainId` alone
+**Phase 0 · measured**
+
+Phase 0 measurement (NOTES §4.1): `tempo.charge({ chainId: 42431 })` issues a
+Challenge announcing `chainId: 4217` (**mainnet**) with a testnet currency.
+`mppx.charge({ chainId })` at route level produces the opposite inconsistency.
+Only `testnet: true` aligns chain and currency.
+
+**Consequence**: `testnet: true` is the only allowed setting, backed by two
+guards (`MPP_NETWORK` at load time, `assertTestnetChallenge` at runtime) and a
+startup self-test. The cost of a mistake here is real money.
+
+---
+
+## D4 — Two guards rather than one
 **Phase 1**
 
-Un seul contrôle (la config) ne protège pas d'une régression du SDK ou d'un
-changement de défaut en amont. On valide donc aussi le Challenge **réellement
-émis**, à chaud, au démarrage.
+A single check (the config) does not protect against an SDK regression or an
+upstream default change. We therefore also validate the Challenge **actually
+issued**, live, at startup.
 
-**Conséquence** : `selfCheck()` bloque l'ouverture du port si le Challenge
-n'est pas ancré sur 42431 + pathUSD.
+**Consequence**: `selfCheck()` blocks the port from opening if the Challenge is
+not anchored on 42431 + pathUSD.
 
 ---
 
-## D5 — SQLite réservé au ledger métier
+## D5 — SQLite reserved for the business ledger
 **Phase 0**
 
-`mppx` n'expose pas de store SQLite (`Store.memory`, `redis`, `upstash`,
-`cloudflare` uniquement). Deux besoins distincts :
+`mppx` exposes no SQLite store (`Store.memory`, `redis`, `upstash`,
+`cloudflare` only). Two distinct needs:
 
-| Besoin | Brique |
+| Need | Building block |
 |---|---|
-| Anti-rejeu des Credentials (protocole) | `Store.AtomicStore` passé à `tempo.charge({ store })` |
-| Journal d'audit métier | notre code, `node:sqlite` |
+| Credential replay protection (protocol) | `Store.AtomicStore` passed to `tempo.charge({ store })` |
+| Business audit log | our code, SQLite |
 
-**Conséquence** : ne pas confondre les deux en phase 3.
+**Consequence**: do not confuse the two in phase 3. (Phase 8 later adds a
+SQLite-backed `Store.AtomicStore` for replay protection — a separate database
+from the ledger. See D21.)
 
 ---
 
-## D6 — Service de recherche factice en phase 1
+## D6 — Fake search service in phase 1
 **Phase 1**
 
-L'objet de la phase 1 est le flux de paiement. Un moteur réel introduirait des
-dépendances et de la latence sans rien prouver sur le 402.
+The point of phase 1 is the payment flow. A real engine would introduce
+dependencies and latency while proving nothing about the 402.
 
-**Conséquence** : `server/search.ts` est déterministe et sans I/O. La **forme**
-de la réponse est stable ; l'implémentation sera remplacée plus tard.
+**Consequence**: `server/search.ts` is deterministic and has no I/O. The
+**shape** of the response is stable; the implementation will be replaced later.
 
 ---
 
-## D7 — Refuser un paiement se fait en levant, pas en renvoyant `undefined`
-**Phase 2 · mesurée · corrige une erreur de la phase 0**
+## D7 — Refusing a payment is done by throwing, not by returning `undefined`
+**Phase 2 · measured · corrects a phase 0 error**
 
-`NOTES.md` §5.4 affirmait d'abord que renvoyer `undefined` depuis `onChallenge`
-revenait à ne pas payer — déduction depuis la formulation de la doc. Le code dit
-le contraire (`client/internal/Fetch.js` l.153) :
+`NOTES.md` §5.4 first claimed that returning `undefined` from `onChallenge`
+amounted to not paying — a deduction from the wording of the docs. The code
+says the opposite (`client/internal/Fetch.js` l.153):
 `const credential = onChallengeCredential ?? (await createCredential())`.
 
-Mesuré : avec `onChallenge` renvoyant `undefined`, le client va jusqu'à la
-transaction on-chain et n'échoue que sur solde nul. Un wallet financé aurait payé.
+Measured: with `onChallenge` returning `undefined`, the client goes all the way
+to the on-chain transaction and only fails on a zero balance. A funded wallet
+would have paid.
 
-**Conséquence** : `BudgetDenied` est une exception, jamais une valeur de retour.
-Deux tests verrouillent l'invariant (aucun appel à `createCredential` sur refus,
-aucune requête rejouée). `NOTES.md` a été corrigé.
+**Consequence**: `BudgetDenied` is an exception, never a return value. Two
+tests lock the invariant (no call to `createCredential` on a refusal, no
+request replayed). `NOTES.md` has been corrected.
 
 ---
 
-## D8 — Budget guard pur, séparé du client
+## D8 — Pure budget guard, separate from the client
 **Phase 2**
 
-La logique qui autorise une dépense ne dépend ni du réseau, ni du SDK, ni d'un
-wallet. `agent/budget.ts` n'importe que le type `Challenge`.
+The logic that authorizes a spend depends on neither the network, nor the SDK,
+nor a wallet. `agent/budget.ts` only imports the `Challenge` type.
 
-**Conséquence** : 26 tests exhaustifs en 15 ms, dont les cas tordus (montant
-absent, chaîne absente, concurrence). Le handler `onChallenge` est extrait en
-`createChallengeHandler(guard)` pour être testable avec un `createCredential`
-injecté — c'est ce qui permet de couvrir le chemin « autorisé » sans payer.
+**Consequence**: 26 exhaustive tests in 15 ms, including the twisted cases
+(missing amount, missing chain, concurrency). The `onChallenge` handler is
+extracted into `createChallengeHandler(guard)` so it is testable with an
+injected `createCredential` — which makes it possible to cover the "authorized"
+path without paying.
 
 ---
 
-## D9 — Réserver à l'autorisation, confirmer au paiement
+## D9 — Reserve at authorization, confirm at payment
 **Phase 2**
 
-Décompter la dépense seulement à la confirmation laisse passer deux appels
-concurrents qui franchissent ensemble le plafond. On engage donc le montant dès
-l'autorisation ; `remaining = total − committed − reserved`.
+Counting the spend only at confirmation lets two concurrent calls cross the cap
+together. We therefore commit the amount as soon as it is authorized;
+`remaining = total − committed − reserved`.
 
-**Conséquence** : en cas d'issue inconnue, l'engagement reste engagé.
-Sur-compter arrête l'agent trop tôt ; sous-compter le fait trop dépenser.
-Seule la première erreur est tolérable.
+**Consequence**: when an outcome is unknown, the commitment stays committed.
+Over-counting stops the agent too early; under-counting makes it overspend.
+Only the first error is tolerable.
 
 ---
 
-## D10 — Montants en `bigint`, jamais en `number`
+## D10 — Amounts in `bigint`, never `number`
 **Phase 2**
 
-Les montants MPP sont des unités de base en chaîne de caractères. Toute
-conversion passe par `agent/amount.ts` en arithmétique entière. Plus de
-décimales que le jeton n'en a ⇒ **refus**, jamais arrondi.
+MPP amounts are base units in a string. Every conversion goes through
+`agent/amount.ts` in integer arithmetic. More decimals than the token has ⇒
+**refusal**, never rounding.
 
-**Conséquence** : un arrondi silencieux sur un montant est une perte d'argent
-sans trace. Le refus est bruyant, donc réparable.
-
----
-
-## D11 — `better-sqlite3` plutôt que `node:sqlite`
-**Phase 3 · corrige `CLAUDE.md`**
-
-`CLAUDE.md` annonçait « SQLite via `node:sqlite` ». Ce module built-in n'existe
-qu'à partir de **Node 22.5** ; le projet cible Node ≥ 20 et la machine tourne en
-20.20.1 — `require('node:sqlite')` renvoie `ERR_UNKNOWN_BUILTIN_MODULE`.
-
-**Conséquence** : `better-sqlite3` (binaire précompilé, API synchrone). Sa
-synchronicité est un avantage ici : les handlers serveur mppx s'exécutent en
-ligne sur le chemin de la requête payante, donc pas de file d'attente à gérer.
-`CLAUDE.md` est corrigé.
+**Consequence**: a silent rounding on an amount is a loss of money with no
+trace. The refusal is loud, hence fixable.
 
 ---
 
-## D12 — L'id de Challenge n'identifie pas une requête : compteur `occurrences`
-**Phase 3 · mesurée**
+## D11 — `better-sqlite3` rather than `node:sqlite`
+**Phase 3 · corrects `CLAUDE.md`**
 
-L'id de Challenge est un HMAC de ses paramètres, donc une fonction pure. Entre
-deux requêtes identiques, seul `expires` varie — à la milliseconde. Mesuré :
-**19 collisions sur 50 requêtes rapides** sur le provider de la phase 1.
+`CLAUDE.md` announced "SQLite via `node:sqlite`". This built-in module only
+exists from **Node 22.5**; the project targets Node ≥ 20 and the machine runs
+20.20.1 — `require('node:sqlite')` returns `ERR_UNKNOWN_BUILTIN_MODULE`.
 
-Un journal indexé sur `challenge_id` fusionne donc des requêtes distinctes.
-C'est ce qui a rendu un test flaky avant d'être compris.
-
-**Conséquence** : `challenge_id` reste la clé primaire (dédupliquer est correct
-au niveau protocole), mais une colonne `occurrences` compte les émissions, et la
-réconciliation multiplie par elle. Deux écritures distinctes en découlent :
-`recordChallenge` (compte) pour `onChallengeCreated`, `ensureChallenge` (ne
-compte pas) pour les chemins success/failed — sinon l'insertion défensive de ces
-derniers gonfle le compteur.
-
-À retenir pour la phase 6 : une requête à Credential invalide émet **deux**
-Challenges (le soumis + le retry). `occurrences` compte des émissions, pas des
-requêtes HTTP.
+**Consequence**: `better-sqlite3` (synchronous API). Its synchronicity is an
+advantage here: mppx server handlers run inline on the paid request path, so
+there is no queue to manage. `CLAUDE.md` is corrected.
 
 ---
 
-## D13 — Le ledger stocke des références, jamais des preuves
+## D12 — The Challenge id does not identify a request: `occurrences` counter
+**Phase 3 · measured**
+
+The Challenge id is an HMAC of its parameters, hence a pure function. Between
+two identical requests, only `expires` varies — to the millisecond. Measured:
+**19 collisions out of 50 rapid requests** on the phase 1 provider.
+
+A log indexed on `challenge_id` therefore merges distinct requests. This is
+what made a test flaky before it was understood.
+
+**Consequence**: `challenge_id` stays the primary key (deduplicating is correct
+at protocol level), but an `occurrences` column counts issuances, and
+reconciliation multiplies by it. Two distinct writes follow: `recordChallenge`
+(counts) for `onChallengeCreated`, `ensureChallenge` (does not count) for the
+success/failed paths — otherwise the defensive insert of the latter inflates
+the counter.
+
+To remember for phase 6: a request with an invalid Credential issues **two**
+Challenges (the submitted one + the retry). `occurrences` counts issuances,
+not HTTP requests.
+
+---
+
+## D13 — The ledger stores references, never proofs
 **Phase 3**
 
-Le schéma n'offre aucune colonne où loger un Credential, un Receipt brut ou du
-texte libre — messages d'erreur compris, car `PaymentError.details` peut
-contenir un Credential ou un hash. On stocke l'id de Challenge, le hash de
-transaction, le DID du payeur et le code d'erreur normalisé.
+The schema offers no column where a Credential, a raw Receipt or free text
+could be stored — error messages included, since `PaymentError.details` may
+contain a Credential or a hash. We store the Challenge id, the transaction
+hash, the payer DID and the normalized error code.
 
-**Conséquence** : la fuite est structurellement impossible, pas seulement
-évitée par discipline. Deux tests le verrouillent, dont un qui lit le fichier
-SQLite en binaire.
-
----
-
-## D14 — DeepSeek au lieu d'Anthropic
-**Phase 4 · corrige `CLAUDE.md`**
-
-Pas de crédit Anthropic disponible. DeepSeek expose une API **compatible
-OpenAI** (`base_url = https://api.deepseek.com`, SDK `openai`), avec tool
-calling au format standard — vérifié par appel réel avant d'écrire la moindre
-ligne, ainsi que la liste des modèles (`deepseek-flash`, `deepseek-v4-pro`) via
-`GET /models`.
-
-**Conséquence** : `CLAUDE.md` corrigé. Le mode « thinking » de DeepSeek est
-désactivé par défaut : il consomme des tokens de raisonnement sans bénéfice
-pour une boucle d'outils cadrée.
+**Consequence**: the leak is structurally impossible, not merely avoided by
+discipline. Two tests lock it in, one of which reads the SQLite file in binary.
 
 ---
 
-## D15 — L'agent parle à un port, pas à un SDK
+## D14 — DeepSeek instead of Anthropic
+**Phase 4 · corrects `CLAUDE.md`**
+
+No Anthropic credit available. DeepSeek exposes an **OpenAI-compatible** API
+(`base_url = https://api.deepseek.com`, `openai` SDK), with tool calling in the
+standard format — verified by a real call before writing a single line, as was
+the model list (`deepseek-flash`, `deepseek-v4-pro`) via `GET /models`.
+
+**Consequence**: `CLAUDE.md` corrected. DeepSeek's "thinking" mode is disabled
+by default: it burns reasoning tokens with no benefit for a framed tool loop.
+
+---
+
+## D15 — The agent talks to a port, not to an SDK
 **Phase 4**
 
-`agent/llm.ts` définit `LlmClient { turn(messages, tools) }`. Le reste de
-l'agent ne connaît que ce type ; le SDK OpenAI ne vit que dans
-`createLlm`.
+`agent/llm.ts` defines `LlmClient { turn(messages, tools) }`. The rest of the
+agent only knows this type; the OpenAI SDK only lives in `createLlm`.
 
-**Conséquence** : la boucle se teste avec un modèle scripté, sans réseau ni
-crédit consommé en CI (29 tests). Changer de fournisseur ne touche pas la
-logique. Le transport `fetch` est lui aussi injectable, ce qui permet de tester
-la traduction vers Chat Completions.
+**Consequence**: the loop is tested with a scripted model, with no network or
+credit consumed in CI (29 tests). Switching provider does not touch the logic.
+The `fetch` transport is also injectable, which makes it possible to test the
+translation to Chat Completions.
 
 ---
 
-## D16 — Un refus du guard est un `tool_result`, pas une exception
+## D16 — A guard refusal is a `tool_result`, not an exception
 **Phase 4**
 
-Si le refus remontait en exception, la boucle casserait et le modèle n'aurait
-aucun moyen d'en tenir compte. L'exécuteur renvoie donc `{ ok: false, code,
-message, hint, retryable }`, et un refus non réessayable coupe l'outil pour le
-tour suivant.
+If the refusal bubbled up as an exception, the loop would break and the model
+would have no way to take it into account. The executor therefore returns
+`{ ok: false, code, message, hint, retryable }`, and a non-retryable refusal
+disables the tool for the next turn.
 
-**Conséquence, observée en vrai** : sur budget insuffisant, le modèle conclut
-en deux tours en signalant explicitement la limite ; sur panne technique
-(`retryable: true`), il retente une fois puis conclut. Le `hint` porte
-l'instruction, pas seulement le diagnostic.
+**Consequence, observed for real**: on insufficient budget, the model concludes
+in two turns explicitly flagging the limit; on a technical failure
+(`retryable: true`), it retries once then concludes. The `hint` carries the
+instruction, not just the diagnosis.
 
 ---
 
-## D17 — Le contexte du modèle est une frontière de sécurité
+## D17 — The model context is a security boundary
 **Phase 4**
 
-Ne remontent au modèle que les données achetées, le montant dépensé et le
-budget restant. Les **messages d'erreur bruts** sont retenus au même titre que
-les Credentials : une panne de signature peut contenir un hash de transaction
-ou un Credential. Le modèle reçoit un `search-unavailable` générique.
+Only the purchased data, the amount spent and the remaining budget go up to the
+model. **Raw error messages** are held back on a par with Credentials: a
+signing failure may contain a transaction hash or a Credential. The model
+receives a generic `search-unavailable`.
 
-**Conséquence** : un test balaie tous les messages transmis et y cherche tout
-motif `0x` + 64 hex, tout `Authorization`, tout Credential.
+**Consequence**: a test sweeps all the messages sent and looks for any `0x` +
+64 hex pattern, any `Authorization`, any Credential.
 
 ---
 
-## D18 — L'e2e vérifie les fonds, pas seulement le Receipt
+## D18 — The e2e checks the funds, not just the Receipt
 **Phase 5**
 
-Un Receipt est déclaratif : le serveur affirme que le paiement a eu lieu. Le
-test relit donc le solde pathUSD du destinataire **avant et après**, et exige
-un delta exactement égal au prix — puis confirme la transaction par
+A Receipt is declarative: the server asserts the payment took place. The test
+therefore re-reads the recipient's pathUSD balance **before and after**, and
+requires a delta exactly equal to the price — then confirms the transaction via
 `eth_getTransactionReceipt`.
 
-**Conséquence** : payeur et destinataire sont deux comptes distincts
-(`agent` et `provider`), sinon le delta ne prouverait rien.
+**Consequence**: payer and recipient are two distinct accounts (`agent` and
+`provider`), otherwise the delta would prove nothing.
 
 ---
 
-## D19 — Les tests qui dépensent sont isolés et auto-ignorés
+## D19 — Tests that spend are isolated and self-skipping
 **Phase 5**
 
-`*.e2e.test.ts` est exclu de `npm test` et lancé par `npm run test:e2e`. En
-l'absence de `AGENT_PRIVATE_KEY`, le test s'ignore au lieu d'échouer.
+`*.e2e.test.ts` is excluded from `npm test` and run by `npm run test:e2e`.
+Without `AGENT_PRIVATE_KEY`, the test skips itself instead of failing.
 
-**Conséquence** : la CI ne dépense rien et ne casse pas faute de wallet.
-`loadDotEnv` reste cantonné aux tests e2e : les tests unitaires ne dépendent
-d'aucun secret ni d'aucun fichier local, et ne doivent pas commencer à le faire.
+**Consequence**: CI spends nothing and does not break for lack of a wallet.
+`loadDotEnv` stays confined to the e2e tests: unit tests depend on no secret
+and no local file, and must not start doing so.
 
 ---
 
-## D20 — La liaison du corps passe par `scope`, faute d'option `body`
+## D20 — Body binding goes through `scope`, for lack of a `body` option
 **Phase 8**
 
-La spec exige un `digest` liant le corps sur POST/PUT/PATCH. Le serveur
-TypeScript de `mppx` n'expose **ni `body` ni `digest`** sur son middleware
-(`MethodFn.Options` : `description`, `expires`, `meta`, `scope`) — contrairement
-au SDK Python, qui a `mpp.charge(body=…)`.
+The spec requires a `digest` binding the body on POST/PUT/PATCH. The
+`mppx` TypeScript server exposes **neither `body` nor `digest`** on its
+middleware (`MethodFn.Options`: `description`, `expires`, `meta`, `scope`) —
+unlike the Python SDK, which has `mpp.charge(body=…)`.
 
-On met donc le digest dans `scope`, que mppx fusionne dans `meta` → `opaque` →
-entrée HMAC du Challenge. Le middleware est construit **par requête**, `scope`
-étant une option statique.
+We therefore put the digest in `scope`, which mppx merges into `meta` →
+`opaque` → the Challenge HMAC input. The middleware is built **per request**,
+`scope` being a static option.
 
-**Conséquence** : corps modifié ⇒ scope différent ⇒ id de Challenge différent
-⇒ `invalid-challenge`. Le test s'appuie sur le contraste avec
-`verification-failed` (corps d'origine), ce qui prouve la discrimination sans
-dépenser un centime.
+**Consequence**: modified body ⇒ different scope ⇒ different Challenge id ⇒
+`invalid-challenge`. The test relies on the contrast with
+`verification-failed` (original body), which proves the discrimination without
+spending a cent.
 
 ---
 
-## D21 — Le store mémoire ne peut plus être choisi par accident
+## D21 — The memory store can no longer be chosen by accident
 **Phase 8**
 
-Le défaut de `tempo.charge` est un store mémoire : ni partagé entre processus,
-**ni durable**. Le second point est le plus insidieux — un redémarrage rouvre
-la fenêtre de rejeu même en mono-instance.
+The `tempo.charge` default is a memory store: neither shared between processes,
+**nor durable**. The second point is the more insidious — a restart reopens the
+replay window even on a single instance.
 
-`REPLAY_STORE` vaut `sqlite` par défaut ; `memory` exige
-`REPLAY_STORE_MEMORY_ACK=i-know` sinon le serveur refuse de démarrer.
+`REPLAY_STORE` defaults to `sqlite`; `memory` requires
+`REPLAY_STORE_MEMORY_ACK=i-know` otherwise the server refuses to start.
 
-**Conséquence** : un contrat de store commun est exécuté contre les trois
-supports (dont un vrai Redis en conteneur), ce qui les rend réellement
-interchangeables. Le test e2e utilise `createReplayStore(config)` — le même
-câblage qu'en production, sinon il ne prouverait rien.
+**Consequence**: a common store contract is run against the three backends
+(including a real Redis in a container), which makes them truly
+interchangeable. The e2e test uses `createReplayStore(config)` — the same
+wiring as in production, otherwise it would prove nothing.
 
 ---
 
-## D22 — Rotation de secret : procédure coordonnée, pas de machinerie non testée
-**Phase 8 · réserve assumée**
+## D22 — Secret rotation: coordinated procedure, no untested machinery
+**Phase 8 · accepted caveat**
 
-`Mppx.create` prend un `secretKey?: string` unique : aucune notion de clé
-précédente, donc pas de recouvrement natif. Deux contournements ont été
-écartés — une cascade de deux instances (invalidable sans multiplier les
-paiements réels) et un identifiant de clé dans le `scope` (sans effet, c'est
-le HMAC qui échoue).
+`Mppx.create` takes a single `secretKey?: string`: no notion of a previous key,
+hence no native overlap. Two workarounds were discarded — a cascade of two
+instances (cannot be validated without multiplying real payments) and a key
+identifier in the `scope` (no effect, it is the HMAC that fails).
 
-**Décision** : ne pas livrer de machinerie de sécurité non testée. À la place,
-une procédure de déploiement coordonné, avec une fenêtre **bornée et connue**
-(5 min, le `expires` par défaut de mppx) : drain, attente, permutation.
+**Decision**: do not ship untested security machinery. Instead, a coordinated
+deployment procedure, with a **bounded and known** window (5 min, the mppx
+default `expires`): drain, wait, swap.
 
-**Conséquence** : courte fenêtre de 402 avec Challenge frais pendant la
-rotation — dégradation, pas panne. À rouvrir si `mppx` accepte un jour une
-liste de clés.
+**Consequence**: a short window of 402s with a fresh Challenge during rotation
+— degradation, not outage. To be reopened if `mppx` ever accepts a list of
+keys.
+
+---
+
+## D23 — `/metrics` is opt-in and token-protected
+**Phase 6**
+
+The Prometheus export reveals traffic and failure volumes. It is therefore
+**absent by default**: without `METRICS_TOKEN` (≥ 16 chars), the route does not
+exist (404); with it, `Authorization: Bearer …` is required (constant-time
+comparison via `hono/bearer-auth`). Labels are limited to `method`, `intent`,
+`status` and a normalized error `code` — never a Challenge id, payer, reference
+or amount.
+
+**Consequence**: a test checks the allowlist of label names and the absence of
+the secret, id, recipient, query and amount in the export.
+
+---
+
+## D24 — The agent serves its own `/metrics`, then lingers
+**Phase 6b**
+
+The agent is a short-lived command, so a scrape target that disappears with the
+process is awkward. `agent/metrics-server.ts` serves `/metrics` (same bearer
+token) during the run and keeps it up for `AGENT_METRICS_LINGER` seconds after
+the end, giving Prometheus time for a scrape.
+
+**Consequence**: simple, no extra service, but a missed scrape window loses the
+final value. A Pushgateway would be the robust alternative, at the cost of one
+more service. Under Compose, run the agent with `--use-aliases` so `agent:9464`
+resolves.

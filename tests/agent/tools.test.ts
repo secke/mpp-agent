@@ -26,27 +26,27 @@ const call = (args: string, name = SEARCH_TOOL.name): ToolCall => ({
 })
 
 describe('createToolExecutor', () => {
-  it('renvoie les résultats et la dépense engagée', async () => {
+  it('returns the results and the committed spend', async () => {
     const guard = new BudgetGuard(LIMITS)
     const execute = createToolExecutor({
       guard,
-      search: async (q) => [{ title: `resultat ${q}` }],
+      search: async (q) => [{ title: `result ${q}` }],
     })
 
     const result = await execute(call('{"query":"mpp"}'))
     expect(result.ok).toBe(true)
     expect(result).toMatchObject({
       ok: true,
-      data: { results: [{ title: 'resultat mpp' }], spent: '0', budgetRemaining: '2.5' },
+      data: { results: [{ title: 'result mpp' }], spent: '0', budgetRemaining: '2.5' },
     })
   })
 
-  it('rend compte de la dépense réelle au modèle', async () => {
+  it('reports the actual spend to the model', async () => {
     const guard = new BudgetGuard(LIMITS)
     const execute = createToolExecutor({
       guard,
       search: async () => {
-        // Simule un paiement abouti pendant l'appel.
+        // Simulates a payment completed during the call.
         const fake = { id: 'c1' } as never
         guard.authorize({
           id: 'c1',
@@ -68,65 +68,65 @@ describe('createToolExecutor', () => {
     expect(result).toMatchObject({ ok: true, data: { spent: '0.5', budgetRemaining: '2' } })
   })
 
-  it('transforme un refus de budget en tool_result, pas en exception', async () => {
+  it('turns a budget refusal into a tool_result, not an exception', async () => {
     const guard = new BudgetGuard(LIMITS)
     const execute = createToolExecutor({
       guard,
       search: async () => {
-        throw new BudgetDenied('budget-exhausted', 'plus rien')
+        throw new BudgetDenied('budget-exhausted', 'nothing left')
       },
     })
 
     const result = await execute(call('{"query":"mpp"}'))
     expect(result).toMatchObject({ ok: false, code: 'budget-exhausted', retryable: false })
-    expect((result as { hint: string }).hint).toMatch(/N’insiste pas/)
+    expect((result as { hint: string }).hint).toMatch(/Do not insist/)
   })
 
-  it('distingue un refus terminal d’un refus ponctuel', async () => {
+  it('tells a terminal refusal from a one-off refusal', async () => {
     const guard = new BudgetGuard(LIMITS)
     const mk = (code: DenyCode) =>
       createToolExecutor({
         guard,
         search: async () => {
-          throw new BudgetDenied(code, 'refus')
+          throw new BudgetDenied(code, 'refusal')
         },
       })
 
     expect(await mk('budget-exhausted')(call('{"query":"a"}'))).toMatchObject({
-      hint: expect.stringMatching(/N’insiste pas/),
+      hint: expect.stringMatching(/Do not insist/),
     })
     expect(await mk('unexpected-currency')(call('{"query":"a"}'))).toMatchObject({
-      hint: expect.stringMatching(/Ne réessaie pas à l’identique/),
+      hint: expect.stringMatching(/Do not retry it unchanged/),
     })
   })
 
-  it('ne divulgue jamais le détail d’une panne au modèle', async () => {
+  it('never discloses the detail of an outage to the model', async () => {
     const guard = new BudgetGuard(LIMITS)
     const execute = createToolExecutor({
       guard,
       search: async () => {
-        throw new Error('0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef fuite')
+        throw new Error('0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef leak')
       },
     })
 
     const result = await execute(call('{"query":"mpp"}'))
     expect(result).toMatchObject({ ok: false, code: 'search-unavailable', retryable: true })
     expect(JSON.stringify(result)).not.toContain('0xdeadbeef')
-    expect(JSON.stringify(result)).not.toContain('fuite')
+    expect(JSON.stringify(result)).not.toContain('leak')
   })
 
-  it('refuse des arguments invalides sans appeler la recherche', async () => {
+  it('refuses invalid arguments without calling the search', async () => {
     const search = vi.fn()
     const execute = createToolExecutor({ guard: new BudgetGuard(LIMITS), search })
 
-    for (const bad of ['{}', 'pas du json', '{"query":"   "}', '{"query":42}', 'null']) {
+    for (const bad of ['{}', 'not json', '{"query":"   "}', '{"query":42}', 'null']) {
       const result = await execute(call(bad))
       expect(result, bad).toMatchObject({ ok: false, code: 'invalid-arguments' })
     }
     expect(search).not.toHaveBeenCalled()
   })
 
-  it('refuse un outil inconnu', async () => {
+  it('refuses an unknown tool', async () => {
     const search = vi.fn()
     const execute = createToolExecutor({ guard: new BudgetGuard(LIMITS), search })
     const result = await execute(call('{"query":"mpp"}', 'rm_rf'))
@@ -136,11 +136,11 @@ describe('createToolExecutor', () => {
 })
 
 describe('SEARCH_TOOL', () => {
-  it('annonce au modèle que l’appel est payant', () => {
-    expect(SEARCH_TOOL.description).toMatch(/PAYANT/)
+  it('tells the model the call is paid', () => {
+    expect(SEARCH_TOOL.description).toMatch(/PAID/)
   })
 
-  it('expose un schéma strict', () => {
+  it('exposes a strict schema', () => {
     expect(SEARCH_TOOL.parameters).toMatchObject({
       type: 'object',
       required: ['query'],

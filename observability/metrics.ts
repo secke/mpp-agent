@@ -1,13 +1,13 @@
 /**
- * Métriques Prometheus (phase 6).
+ * Prometheus metrics (phase 6).
  *
  * Source : https://github.com/siimon/prom-client (Registry, Counter, Histogram, Gauge).
- * Hooks mppx : https://mpp.dev/sdk/typescript/server/Mppx.create § Event handling.
+ * mppx hooks: https://mpp.dev/sdk/typescript/server/Mppx.create § Event handling.
  *
- * ⚠️ Labels sûrs uniquement : `method`, `intent`, `status`, `code` (code MPP
- * normalisé, ensemble borné). Jamais d'id de Challenge, de payeur, de
- * référence de transaction ni de montant : ce sont des identifiants à
- * cardinalité non bornée, et ils fuiraient dans l'export (NOTES §8).
+ * ⚠️ Safe labels only: `method`, `intent`, `status`, `code` (normalized MPP
+ * code, bounded set). Never a Challenge id, payer, transaction reference or
+ * amount: these are unbounded-cardinality identifiers, and they would leak
+ * into the export (NOTES §8).
  */
 import { Challenge } from 'mppx'
 import { Counter, Gauge, Histogram, Registry } from 'prom-client'
@@ -19,25 +19,25 @@ export type Metrics = ReturnType<typeof createMetrics>
 export function createMetrics(registry: Registry = new Registry()) {
   const challenges = new Counter({
     name: 'mpp_challenges_total',
-    help: 'Challenges 402 émis.',
+    help: '402 Challenges issued.',
     labelNames: ['method', 'intent'],
     registers: [registry],
   })
   const payments = new Counter({
     name: 'mpp_payments_total',
-    help: 'Paiements traités, par issue.',
+    help: 'Payments processed, by outcome.',
     labelNames: ['method', 'intent', 'status'],
     registers: [registry],
   })
   const failures = new Counter({
     name: 'mpp_payment_failures_total',
-    help: 'Paiements échoués, par code MPP normalisé.',
+    help: 'Failed payments, by normalized MPP code.',
     labelNames: ['code'],
     registers: [registry],
   })
   const settlement = new Histogram({
     name: 'mpp_settlement_duration_seconds',
-    help: 'Durée de traitement des requêtes portant un Credential (vérification + règlement).',
+    help: 'Processing time of requests carrying a Credential (verification + settlement).',
     labelNames: ['status'],
     buckets: [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30],
     registers: [registry],
@@ -47,7 +47,7 @@ export function createMetrics(registry: Registry = new Registry()) {
     registry,
     settlement,
 
-    /** Branche les compteurs sur les hooks d'une instance de paiement serveur. */
+    /** Hooks the counters onto a server payment instance. */
     attach(payment: {
       onChallengeCreated: (h: (c: { challenge: Challenge.Challenge }) => void) => unknown
       onPaymentSuccess: (h: (c: { challenge: Challenge.Challenge }) => void) => unknown
@@ -68,14 +68,14 @@ export function createMetrics(registry: Registry = new Registry()) {
     },
 
     /**
-     * Dépense cumulée de l'agent, lue à la demande depuis le budget guard.
-     * `snapshot()` rend des décimales lisibles (« 0.5 ») ; on les expose en
-     * pathUSD, sans conversion en unités de base.
+     * Cumulative agent spend, read on demand from the budget guard.
+     * `snapshot()` returns readable decimals ("0.5"); we expose them in
+     * pathUSD, without conversion to base units.
      */
     attachAgent(guard: { snapshot(): { committed: string; reserved: string; remaining: string } }): void {
       new Gauge({
         name: 'agent_spent_pathusd',
-        help: "Dépense confirmée de l'agent (pathUSD).",
+        help: 'Confirmed agent spend (pathUSD).',
         registers: [registry],
         collect() {
           this.set(Number(guard.snapshot().committed))
@@ -83,7 +83,7 @@ export function createMetrics(registry: Registry = new Registry()) {
       })
       new Gauge({
         name: 'agent_budget_remaining_pathusd',
-        help: "Budget restant de l'agent (pathUSD).",
+        help: 'Remaining agent budget (pathUSD).',
         registers: [registry],
         collect() {
           this.set(Number(guard.snapshot().remaining))

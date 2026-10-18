@@ -1,14 +1,14 @@
 /**
- * Phase 5 — paiement réel sur Tempo Moderato.
+ * Phase 5 — real payment on Tempo Moderato.
  *
- * ⚠️ Ce test DÉPENSE des fonds testnet et appelle le RPC public.
- * Il est exclu du run par défaut (`npm test`) et lancé par `npm run test:e2e`.
- * Il s'auto-ignore si `AGENT_PRIVATE_KEY` n'est pas configurée.
+ * ⚠️ This test SPENDS testnet funds and calls the public RPC.
+ * It is excluded from the default run (`npm test`) and run by `npm run test:e2e`.
+ * It skips itself if `AGENT_PRIVATE_KEY` is not configured.
  *
- * Préparation :
+ * Setup:
  *   npx mppx account create --account agent
  *   npx mppx account fund --network testnet --account agent
- *   npx mppx account export --account agent   → AGENT_PRIVATE_KEY dans .env
+ *   npx mppx account export --account agent   → AGENT_PRIVATE_KEY in .env
  */
 import { Receipt } from 'mppx'
 import { beforeAll, describe, expect, it } from 'vitest'
@@ -41,13 +41,13 @@ async function rpc(method: string, params: unknown[]): Promise<any> {
   return body.result
 }
 
-/** Solde pathUSD (TIP-20 `balanceOf`), en unités de base. */
+/** pathUSD balance (TIP-20 `balanceOf`), in base units. */
 async function balanceOf(address: string): Promise<bigint> {
   const data = `0x70a08231${address.slice(2).toLowerCase().padStart(64, '0')}`
   return BigInt((await rpc('eth_call', [{ to: PATH_USD, data }, 'latest'])) || '0x0')
 }
 
-describe.skipIf(!configured)('paiement réel sur Moderato', () => {
+describe.skipIf(!configured)('real payment on Moderato', () => {
   let serverConfig: ReturnType<typeof loadConfig>
   let agent: ReturnType<typeof loadAgentConfig>
 
@@ -56,9 +56,9 @@ describe.skipIf(!configured)('paiement réel sur Moderato', () => {
     agent = loadAgentConfig()
   })
 
-  it('paie, reçoit le contenu, et le transfert est confirmé on-chain', { timeout: 180_000 }, async () => {
+  it('pays, receives the content, and the transfer is confirmed on-chain', { timeout: 180_000 }, async () => {
       const price = toBaseUnits(serverConfig.searchPrice, 6)
-      // Même câblage qu'en production : le store anti-rejeu vient de la config.
+      // Same wiring as in production: the replay store comes from the config.
       const { store, close } = await createReplayStore(serverConfig)
       const payment = createPayment(serverConfig, store)
       const ledger = new Ledger(openLedger(':memory:'))
@@ -66,7 +66,7 @@ describe.skipIf(!configured)('paiement réel sur Moderato', () => {
       const app = createApp(serverConfig, payment)
 
       const guard = new BudgetGuard(agent.limits)
-      // On capture le Credential envoyé, pour la preuve d'anti-rejeu ci-dessous.
+      // We capture the Credential sent, for the replay-protection proof below.
       let credential: string | undefined
       const { mppx } = createPayingClient({
         account: agent.account,
@@ -96,7 +96,7 @@ describe.skipIf(!configured)('paiement réel sur Moderato', () => {
       expect(receipt.method).toBe('tempo')
       expect(receipt.reference).toMatch(/^0x[0-9a-f]{64}$/i)
 
-      // --- Budget décompté ---
+      // --- Budget counted ---
       expect(guard.committed).toBe(price)
 
       // --- Ledger ---
@@ -107,17 +107,17 @@ describe.skipIf(!configured)('paiement réel sur Moderato', () => {
 
       // --- Confirmation on-chain ---
       const txReceipt = await rpc('eth_getTransactionReceipt', [receipt.reference])
-      expect(txReceipt, 'transaction introuvable sur le RPC').toBeTruthy()
+      expect(txReceipt, 'transaction not found on the RPC').toBeTruthy()
       expect(txReceipt.status).toBe('0x1')
       expect(String(txReceipt.from).toLowerCase()).toBe(agent.account.address.toLowerCase())
       expect(String(txReceipt.to).toLowerCase()).toBe(PATH_USD)
 
-      // --- Les fonds sont réellement arrivés ---
+      // --- The funds really arrived ---
       const after = await balanceOf(serverConfig.recipient)
       expect(after - before).toBe(price)
 
-      // --- Anti-rejeu : le même Credential resservi doit être refusé ---
-      expect(credential, 'aucun Credential capturé').toBeTruthy()
+      // --- Replay protection: the same Credential served again must be refused ---
+      expect(credential, 'no Credential captured').toBeTruthy()
       const replay = await app.fetch(
         new Request('http://api.test/v1/search?q=mpp', {
           headers: { Authorization: credential! },
@@ -130,8 +130,8 @@ describe.skipIf(!configured)('paiement réel sur Moderato', () => {
   })
 })
 
-describe.skipIf(configured)('paiement réel — ignoré', () => {
-  it('AGENT_PRIVATE_KEY absente : configurez un wallet financé', () => {
+describe.skipIf(configured)('real payment — skipped', () => {
+  it('AGENT_PRIVATE_KEY absent: configure a funded wallet', () => {
     expect(configured).toBe(false)
   })
 })

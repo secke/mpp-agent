@@ -1,13 +1,13 @@
 /**
- * Budget guard — l'autorité qui décide si un Challenge est payable.
+ * Budget guard — the authority deciding whether a Challenge is payable.
  *
- * Module **pur** : aucune I/O, aucune dépendance au SDK au-delà du type
- * `Challenge`. C'est délibéré — la logique qui protège l'argent doit être
- * testable exhaustivement sans réseau ni wallet.
+ * **Pure** module: no I/O, no dependency on the SDK beyond the `Challenge`
+ * type. This is deliberate — the logic protecting the money must be
+ * exhaustively testable without a network or a wallet.
  *
- * Principe : **fail-closed**. Tout ce qui n'est pas explicitement reconnu
- * est refusé. Un champ manquant, une devise inattendue, un montant illisible
- * ⇒ refus. On préfère un agent bloqué à un agent qui paie n'importe quoi.
+ * Principle: **fail-closed**. Anything not explicitly recognized is refused.
+ * A missing field, an unexpected currency, an unreadable amount ⇒ refusal.
+ * We prefer a blocked agent to an agent that pays for anything.
  */
 import type { Challenge } from 'mppx'
 
@@ -23,14 +23,14 @@ export type DenyCode =
   | 'budget-exhausted'
 
 /**
- * Refus du guard. **Lever est la seule façon de refuser un paiement.**
+ * Guard refusal. **Throwing is the only way to refuse a payment.**
  *
- * Vérifié sur mppx@0.10.1 (node_modules/mppx/dist/client/internal/Fetch.js,
- * ligne 153) : `const credential = onChallengeCredential ?? (await createCredential())`.
- * Renvoyer `undefined` depuis `onChallenge` **ne refuse pas** — le client
- * retombe sur la création de Credential par défaut et paie. Mesuré : avec un
- * `onChallenge` renvoyant `undefined`, le client est allé jusqu'à la
- * transaction on-chain (échouée pour solde nul, pas pour refus).
+ * Verified on mppx@0.10.1 (node_modules/mppx/dist/client/internal/Fetch.js,
+ * line 153): `const credential = onChallengeCredential ?? (await createCredential())`.
+ * Returning `undefined` from `onChallenge` **does not refuse** — the client
+ * falls back to the default Credential creation and pays. Measured: with an
+ * `onChallenge` returning `undefined`, the client went all the way to the
+ * on-chain transaction (which failed for a zero balance, not because of a refusal).
  */
 export class BudgetDenied extends Error {
   override name = 'BudgetDenied'
@@ -43,17 +43,17 @@ export class BudgetDenied extends Error {
 }
 
 export type BudgetLimits = {
-  /** Plafond par appel, en unités de base. */
+  /** Per-call cap, in base units. */
   readonly maxPerCall: bigint
-  /** Enveloppe totale sur la durée de vie du guard, en unités de base. */
+  /** Total envelope over the guard's lifetime, in base units. */
   readonly totalBudget: bigint
-  /** Chaîne acceptée (Tempo Moderato). */
+  /** Accepted chain (Tempo Moderato). */
   readonly chainId: number
-  /** Adresse de jeton acceptée (pathUSD). Comparaison insensible à la casse. */
+  /** Accepted token address (pathUSD). Case-insensitive comparison. */
   readonly currency: string
-  /** Si fourni, seuls ces destinataires sont payables. */
+  /** If provided, only these recipients are payable. */
   readonly recipients?: readonly string[] | undefined
-  /** Décimales du jeton, pour les messages lisibles. */
+  /** Token decimals, for readable messages. */
   readonly decimals: number
 }
 
@@ -66,23 +66,23 @@ type ChallengeRequest = {
 
 export class BudgetGuard {
   readonly limits: BudgetLimits
-  /** Dépense confirmée (paiement abouti). */
+  /** Confirmed spend (completed payment). */
   #committed = 0n
-  /** Montants engagés mais pas encore confirmés, par id de Challenge. */
+  /** Amounts committed but not yet confirmed, by Challenge id. */
   readonly #reserved = new Map<string, bigint>()
 
   constructor(limits: BudgetLimits) {
-    if (limits.maxPerCall <= 0n) throw new RangeError('maxPerCall doit être > 0')
-    if (limits.totalBudget <= 0n) throw new RangeError('totalBudget doit être > 0')
+    if (limits.maxPerCall <= 0n) throw new RangeError('maxPerCall must be > 0')
+    if (limits.totalBudget <= 0n) throw new RangeError('totalBudget must be > 0')
     this.limits = limits
   }
 
-  /** Dépense confirmée. */
+  /** Confirmed spend. */
   get committed(): bigint {
     return this.#committed
   }
 
-  /** Total engagé et non encore confirmé. */
+  /** Total committed and not yet confirmed. */
   get reserved(): bigint {
     let sum = 0n
     for (const amount of this.#reserved.values()) sum += amount
@@ -90,10 +90,9 @@ export class BudgetGuard {
   }
 
   /**
-   * Ce qui reste réellement dépensable : l'enveloppe moins le confirmé
-   * **et** moins l'engagé. Les réservations comptent tout de suite, sinon
-   * deux appels concurrents peuvent chacun passer sous le plafond et le
-   * franchir ensemble.
+   * What is actually still spendable: the envelope minus the confirmed
+   * **and** minus the committed. Reservations count immediately, otherwise
+   * two concurrent calls could each pass under the cap and cross it together.
    */
   get remaining(): bigint {
     const left = this.limits.totalBudget - this.#committed - this.reserved
@@ -101,20 +100,20 @@ export class BudgetGuard {
   }
 
   /**
-   * Valide un Challenge et engage son montant.
-   * @throws {BudgetDenied} si le paiement doit être refusé.
-   * @returns le montant engagé, en unités de base.
+   * Validates a Challenge and commits its amount.
+   * @throws {BudgetDenied} if the payment must be refused.
+   * @returns the committed amount, in base units.
    */
   authorize(challenge: Challenge.Challenge): bigint {
-    // Réautorisation du même Challenge (retry) : on ne réengage pas deux fois.
+    // Re-authorization of the same Challenge (retry): we do not commit twice.
     const already = this.#reserved.get(challenge.id)
     if (already !== undefined) return already
 
     if (challenge.method !== 'tempo' || challenge.intent !== 'charge')
       throw new BudgetDenied(
         'unsupported-method',
-        `Méthode non prise en charge : ${challenge.method}/${challenge.intent}. ` +
-          `Seul tempo/charge est autorisé.`,
+        `Unsupported method: ${challenge.method}/${challenge.intent}. ` +
+          `Only tempo/charge is allowed.`,
       )
 
     const request = (challenge.request ?? {}) as ChallengeRequest
@@ -123,14 +122,14 @@ export class BudgetGuard {
     if (chainId !== this.limits.chainId)
       throw new BudgetDenied(
         'unexpected-chain',
-        `Challenge sur chainId=${String(chainId)}, attendu ${this.limits.chainId}.`,
+        `Challenge on chainId=${String(chainId)}, expected ${this.limits.chainId}.`,
       )
 
     const currency = request.currency
     if (typeof currency !== 'string' || currency.toLowerCase() !== this.limits.currency.toLowerCase())
       throw new BudgetDenied(
         'unexpected-currency',
-        `Devise ${String(currency)} inattendue, attendu ${this.limits.currency}.`,
+        `Unexpected currency ${String(currency)}, expected ${this.limits.currency}.`,
       )
 
     const recipient = request.recipient
@@ -141,7 +140,7 @@ export class BudgetGuard {
       if (!allowed)
         throw new BudgetDenied(
           'unexpected-recipient',
-          `Destinataire ${String(recipient)} hors liste blanche.`,
+          `Recipient ${String(recipient)} is not on the allowlist.`,
         )
     }
 
@@ -151,7 +150,7 @@ export class BudgetGuard {
     } catch (error) {
       throw new BudgetDenied(
         'malformed-amount',
-        error instanceof AmountError ? error.message : 'Montant illisible',
+        error instanceof AmountError ? error.message : 'Unreadable amount',
       )
     }
 
@@ -160,21 +159,21 @@ export class BudgetGuard {
     if (amount > this.limits.maxPerCall)
       throw new BudgetDenied(
         'per-call-cap',
-        `Montant ${human(amount)} au-dessus du plafond par appel ${human(this.limits.maxPerCall)}.`,
+        `Amount ${human(amount)} exceeds the per-call cap ${human(this.limits.maxPerCall)}.`,
       )
 
     if (amount > this.remaining)
       throw new BudgetDenied(
         'budget-exhausted',
-        `Montant ${human(amount)} au-dessus du budget restant ${human(this.remaining)} ` +
-          `(enveloppe ${human(this.limits.totalBudget)}, déjà dépensé ${human(this.#committed)}).`,
+        `Amount ${human(amount)} exceeds the remaining budget ${human(this.remaining)} ` +
+          `(envelope ${human(this.limits.totalBudget)}, already spent ${human(this.#committed)}).`,
       )
 
     this.#reserved.set(challenge.id, amount)
     return amount
   }
 
-  /** Le paiement a abouti : l'engagement devient une dépense. */
+  /** The payment completed: the commitment becomes spend. */
   settle(challengeId: string): void {
     const amount = this.#reserved.get(challengeId)
     if (amount === undefined) return
@@ -182,12 +181,12 @@ export class BudgetGuard {
     this.#committed += amount
   }
 
-  /** Le paiement a échoué : on rend l'engagement à l'enveloppe. */
+  /** The payment failed: the commitment goes back to the envelope. */
   release(challengeId: string): void {
     this.#reserved.delete(challengeId)
   }
 
-  /** Instantané pour les journaux et les métriques. Aucune donnée sensible. */
+  /** Snapshot for logs and metrics. No sensitive data. */
   snapshot(): { committed: string; reserved: string; remaining: string; inFlight: number } {
     const d = this.limits.decimals
     return {

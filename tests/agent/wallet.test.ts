@@ -18,7 +18,7 @@ const env = (overrides: Record<string, string | undefined> = {}) =>
   }) as NodeJS.ProcessEnv
 
 describe('loadAgentConfig', () => {
-  it('charge une configuration valide et verrouille le testnet', () => {
+  it('loads a valid configuration and locks testnet', () => {
     const config = loadAgentConfig(env())
     expect(config.limits.chainId).toBe(TESTNET_CHAIN_ID)
     expect(config.limits.currency).toBe(PATH_USD)
@@ -27,42 +27,42 @@ describe('loadAgentConfig', () => {
     expect(config.account.address).toMatch(/^0x[0-9a-fA-F]{40}$/)
   })
 
-  it('refuse tout réseau autre que testnet', () => {
-    expect(() => loadAgentConfig(env({ MPP_NETWORK: 'mainnet' }))).toThrow(/testnet uniquement/)
+  it('refuses any network other than testnet', () => {
+    expect(() => loadAgentConfig(env({ MPP_NETWORK: 'mainnet' }))).toThrow(/testnet-only/)
   })
 
-  it('exige une clé privée et la refuse si malformée', () => {
+  it('requires a private key and refuses it if malformed', () => {
     expect(() => loadAgentConfig(env({ AGENT_PRIVATE_KEY: undefined }))).toThrow(
-      /AGENT_PRIVATE_KEY est requis/,
+      /AGENT_PRIVATE_KEY is required/,
     )
     expect(() => loadAgentConfig(env({ AGENT_PRIVATE_KEY: '0xabc' }))).toThrow(WalletError)
   })
 
-  it('ne fait jamais figurer la clé dans le message d’erreur', () => {
+  it('never puts the key in the error message', () => {
     const secret = '0xdeadbeef'.padEnd(66, '0')
     try {
       loadAgentConfig(env({ AGENT_PRIVATE_KEY: `${secret}zz` }))
-      throw new Error('attendu : un refus')
+      throw new Error('expected: a refusal')
     } catch (error) {
       expect((error as Error).message).not.toContain('deadbeef')
-      expect((error as Error).message).toContain('malformée')
+      expect((error as Error).message).toContain('malformed')
     }
   })
 
-  it('refuse un plafond par appel supérieur à l’enveloppe', () => {
+  it('refuses a per-call cap above the envelope', () => {
     expect(() =>
       loadAgentConfig(env({ AGENT_MAX_PER_CALL: '20.00', AGENT_TOTAL_BUDGET: '10.00' })),
-    ).toThrow(/inatteignable/)
+    ).toThrow(/unreachable/)
   })
 
-  it('lit une liste blanche de destinataires', () => {
+  it('reads a recipient allowlist', () => {
     const config = loadAgentConfig(
       env({ AGENT_ALLOWED_RECIPIENTS: ' 0xAAA , 0xBBB ,, ' }),
     )
     expect(config.limits.recipients).toEqual(['0xAAA', '0xBBB'])
   })
 
-  it('n’impose aucune liste blanche par défaut', () => {
+  it('imposes no allowlist by default', () => {
     expect(loadAgentConfig(env()).limits.recipients).toBeUndefined()
   })
 })

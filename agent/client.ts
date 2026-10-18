@@ -1,15 +1,15 @@
 /**
- * Client HTTP payeur de l'agent.
+ * The agent's paying HTTP client.
  *
- * Deux protections empilées :
- *  1. les garde-fous natifs du SDK (`expectedChainId`, `allowedChainIds`,
- *     `expectedRecipients`) — le client refuse de signer hors de ces bornes ;
- *  2. notre budget guard, qui ajoute la dimension que le SDK ignore :
- *     combien on a déjà dépensé.
+ * Two stacked protections:
+ *  1. the SDK's native guardrails (`expectedChainId`, `allowedChainIds`,
+ *     `expectedRecipients`) — the client refuses to sign outside these bounds;
+ *  2. our budget guard, which adds the dimension the SDK ignores:
+ *     how much has already been spent.
  *
- * Sources :
- * - `Mppx.create` client : https://mpp.dev/sdk/typescript/client/Mppx.create
- * - options `expectedChainId` / `allowedChainIds` / `expectedRecipients` :
+ * Sources:
+ * - Client `Mppx.create`: https://mpp.dev/sdk/typescript/client/Mppx.create
+ * - `expectedChainId` / `allowedChainIds` / `expectedRecipients` options:
  *   node_modules/mppx/dist/tempo/client/Charge.d.ts
  */
 import { Mppx, tempo } from 'mppx/client'
@@ -18,20 +18,20 @@ import type { PrivateKeyAccount } from 'viem'
 import { BudgetDenied, type BudgetGuard } from './budget.ts'
 
 /**
- * Fabrique le handler de décision, isolé du SDK pour être testable sans
- * réseau ni wallet : `createCredential` est injecté.
+ * Builds the decision handler, isolated from the SDK so it is testable
+ * without a network or a wallet: `createCredential` is injected.
  */
 export function createChallengeHandler(guard: BudgetGuard) {
   return async (
     challenge: { id: string; method: string; intent: string; request: unknown },
     helpers: { createCredential: () => Promise<string> },
   ): Promise<string> => {
-    guard.authorize(challenge as never) // lève BudgetDenied pour refuser
+    guard.authorize(challenge as never) // throws BudgetDenied to refuse
     try {
       return await helpers.createCredential()
     } catch (error) {
-      // La signature ou la diffusion a échoué : on rend l'engagement,
-      // sinon le budget se vide sans qu'aucun paiement n'ait eu lieu.
+      // Signing or broadcasting failed: give the commitment back,
+      // otherwise the budget drains without any payment having happened.
       guard.release(challenge.id)
       throw error
     }
@@ -41,7 +41,7 @@ export function createChallengeHandler(guard: BudgetGuard) {
 export type PayingClientOptions = {
   readonly account: PrivateKeyAccount
   readonly guard: BudgetGuard
-  /** Injectable pour les tests : par défaut le `fetch` global (non patché). */
+  /** Injectable for tests: defaults to the global `fetch` (unpatched). */
   readonly fetch?: typeof globalThis.fetch | undefined
 }
 
@@ -52,35 +52,35 @@ export function createPayingClient({ account, guard, fetch }: PayingClientOption
     methods: [
       tempo({
         account,
-        // Garde-fous SDK : rejette tout Challenge hors de ces bornes,
-        // avant même que notre guard ne soit consulté.
+        // SDK guardrails: reject any Challenge outside these bounds,
+        // before our guard is even consulted.
         expectedChainId: chainId,
         allowedChainIds: [chainId],
         ...(recipients ? { expectedRecipients: recipients as readonly `0x${string}`[] } : {}),
       }),
     ],
 
-    // ⚠️ INVARIANT : ne jamais patcher globalThis.fetch.
-    // Le défaut est `true` ; il rendrait tout fetch du process payant,
-    // y compris ceux qui ne passent pas par le guard (NOTES §5.4).
+    // ⚠️ INVARIANT: never patch globalThis.fetch.
+    // The default is `true`; it would make every fetch in the process paying,
+    // including those that do not go through the guard (NOTES §5.4).
     polyfill: false,
     ...(fetch ? { fetch } : {}),
 
     /**
-     * Point de décision. **Lever est la seule façon de refuser** : renvoyer
-     * `undefined` fait retomber mppx sur `createCredential()` et paie
-     * (mppx/dist/client/internal/Fetch.js l.153, mesuré en phase 2).
+     * Decision point. **Throwing is the only way to refuse**: returning
+     * `undefined` makes mppx fall back to `createCredential()` and pay
+     * (mppx/dist/client/internal/Fetch.js l.153, measured in phase 2).
      */
     onChallenge: createChallengeHandler(guard),
   })
 
-  // Le paiement a abouti : l'engagement devient une dépense.
+  // The payment completed: the commitment becomes spend.
   mppx.onPaymentResponse(({ challenge }) => {
     guard.settle(challenge.id)
   })
 
-  // Échec côté réseau ou serveur : on libère si on sait de quel Challenge il s'agit.
-  // `challenge` est optionnel dans ce payload (Fetch.d.ts) — d'où la garde.
+  // Network or server-side failure: release if we know which Challenge it is.
+  // `challenge` is optional in this payload (Fetch.d.ts) — hence the guard.
   mppx.onPaymentFailed(({ challenge }) => {
     if (challenge) guard.release(challenge.id)
   })
@@ -88,7 +88,7 @@ export function createPayingClient({ account, guard, fetch }: PayingClientOption
   return { mppx, guard }
 }
 
-/** Vrai si l'erreur est un refus du budget guard (et non une panne). */
+/** True if the error is a budget guard refusal (not an outage). */
 export function isBudgetDenied(error: unknown): error is BudgetDenied {
   return error instanceof BudgetDenied
 }

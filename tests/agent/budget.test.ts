@@ -50,30 +50,30 @@ function denyCode(fn: () => unknown): string {
     if (error instanceof BudgetDenied) return error.code
     throw error
   }
-  throw new Error('attendu : un refus, obtenu : une autorisation')
+  throw new Error('expected: a refusal, got: an authorization')
 }
 
-describe('BudgetGuard — autorisation nominale', () => {
+describe('BudgetGuard — nominal authorization', () => {
   let guard: BudgetGuard
   beforeEach(() => {
     guard = new BudgetGuard(LIMITS)
   })
 
-  it('autorise un Challenge conforme et engage le montant', () => {
+  it('authorizes a compliant Challenge and commits the amount', () => {
     expect(guard.authorize(challenge())).toBe(500000n)
     expect(guard.reserved).toBe(500000n)
     expect(guard.committed).toBe(0n)
     expect(guard.remaining).toBe(toBaseUnits('2.00', 6))
   })
 
-  it('ne réengage pas deux fois le même Challenge (retry)', () => {
+  it('does not commit the same Challenge twice (retry)', () => {
     const c = challenge()
     guard.authorize(c)
     guard.authorize(c)
     expect(guard.reserved).toBe(500000n)
   })
 
-  it('décompte la dépense une fois le paiement confirmé', () => {
+  it('counts the spend once the payment is confirmed', () => {
     const c = challenge()
     guard.authorize(c)
     guard.settle(c.id)
@@ -82,7 +82,7 @@ describe('BudgetGuard — autorisation nominale', () => {
     expect(guard.remaining).toBe(toBaseUnits('2.00', 6))
   })
 
-  it('rend l’engagement quand le paiement échoue', () => {
+  it('gives the commitment back when the payment fails', () => {
     const c = challenge()
     guard.authorize(c)
     guard.release(c.id)
@@ -90,29 +90,29 @@ describe('BudgetGuard — autorisation nominale', () => {
     expect(guard.remaining).toBe(LIMITS.totalBudget)
   })
 
-  it('ignore un settle/release sur un Challenge inconnu', () => {
-    expect(() => guard.settle('jamais-vu')).not.toThrow()
-    expect(() => guard.release('jamais-vu')).not.toThrow()
+  it('ignores a settle/release on an unknown Challenge', () => {
+    expect(() => guard.settle('never-seen')).not.toThrow()
+    expect(() => guard.release('never-seen')).not.toThrow()
     expect(guard.committed).toBe(0n)
   })
 })
 
-describe('BudgetGuard — plafonds', () => {
+describe('BudgetGuard — caps', () => {
   let guard: BudgetGuard
   beforeEach(() => {
     guard = new BudgetGuard(LIMITS)
   })
 
-  it('refuse au-dessus du plafond par appel', () => {
+  it('refuses above the per-call cap', () => {
     expect(denyCode(() => guard.authorize(challenge({ amount: '1000001' })))).toBe('per-call-cap')
-    expect(guard.reserved).toBe(0n) // rien d’engagé sur un refus
+    expect(guard.reserved).toBe(0n) // nothing committed on a refusal
   })
 
-  it('accepte pile au plafond par appel', () => {
+  it('accepts exactly the per-call cap', () => {
     expect(() => guard.authorize(challenge({ amount: '1000000' }))).not.toThrow()
   })
 
-  it('refuse quand l’enveloppe est épuisée', () => {
+  it('refuses when the envelope is exhausted', () => {
     for (const amount of ['1000000', '1000000']) {
       const c = challenge({ amount })
       guard.authorize(c)
@@ -124,9 +124,9 @@ describe('BudgetGuard — plafonds', () => {
     )
   })
 
-  it('compte les engagements en cours, pas seulement le confirmé', () => {
-    // Deux appels concurrents à 1.00 sur une enveloppe de 2.50 : le troisième
-    // doit être refusé même si aucun n’est encore confirmé.
+  it('counts in-flight commitments, not just the confirmed', () => {
+    // Two concurrent calls at 1.00 on a 2.50 envelope: the third must be
+    // refused even though none is confirmed yet.
     guard.authorize(challenge({ amount: '1000000' }))
     guard.authorize(challenge({ amount: '1000000' }))
     expect(guard.remaining).toBe(toBaseUnits('0.50', 6))
@@ -142,30 +142,30 @@ describe('BudgetGuard — fail-closed', () => {
     guard = new BudgetGuard(LIMITS)
   })
 
-  it('refuse une chaîne inattendue (mainnet)', () => {
+  it('refuses an unexpected chain (mainnet)', () => {
     expect(denyCode(() => guard.authorize(challenge({ chainId: 4217 })))).toBe('unexpected-chain')
   })
 
-  it('refuse un Challenge sans chainId', () => {
+  it('refuses a Challenge with no chainId', () => {
     expect(denyCode(() => guard.authorize(challenge({ chainId: undefined })))).toBe(
       'unexpected-chain',
     )
   })
 
-  it('refuse une devise inattendue', () => {
+  it('refuses an unexpected currency', () => {
     expect(denyCode(() => guard.authorize(challenge({ currency: USDC_MAINNET })))).toBe(
       'unexpected-currency',
     )
   })
 
-  it('refuse un montant illisible', () => {
-    for (const amount of ['0.5', '-1', '', 'beaucoup', 500000])
+  it('refuses an unreadable amount', () => {
+    for (const amount of ['0.5', '-1', '', 'lots', 500000])
       expect(denyCode(() => guard.authorize(challenge({ amount }))), String(amount)).toBe(
         'malformed-amount',
       )
   })
 
-  it('refuse une méthode ou un intent non pris en charge', () => {
+  it('refuses an unsupported method or intent', () => {
     expect(denyCode(() => guard.authorize(challenge({ method: 'stripe' })))).toBe(
       'unsupported-method',
     )
@@ -174,7 +174,7 @@ describe('BudgetGuard — fail-closed', () => {
     )
   })
 
-  it('refuse un destinataire hors liste blanche quand elle est définie', () => {
+  it('refuses a recipient outside the allowlist when one is defined', () => {
     const strict = new BudgetGuard({ ...LIMITS, recipients: [RECIPIENT] })
     expect(() => strict.authorize(challenge({ recipient: RECIPIENT }))).not.toThrow()
     expect(
@@ -184,19 +184,19 @@ describe('BudgetGuard — fail-closed', () => {
     ).toBe('unexpected-recipient')
   })
 
-  it('compare les adresses sans tenir compte de la casse', () => {
+  it('compares addresses case-insensitively', () => {
     const strict = new BudgetGuard({ ...LIMITS, recipients: [RECIPIENT.toLowerCase()] })
     expect(() => strict.authorize(challenge({ recipient: RECIPIENT.toUpperCase() }))).not.toThrow()
   })
 
-  it('refuse des limites absurdes à la construction', () => {
+  it('refuses absurd limits at construction', () => {
     expect(() => new BudgetGuard({ ...LIMITS, maxPerCall: 0n })).toThrow(RangeError)
     expect(() => new BudgetGuard({ ...LIMITS, totalBudget: -1n })).toThrow(RangeError)
   })
 })
 
-describe('BudgetGuard — instantané', () => {
-  it('expose des montants lisibles et aucune donnée sensible', () => {
+describe('BudgetGuard — snapshot', () => {
+  it('exposes readable amounts and no sensitive data', () => {
     const guard = new BudgetGuard(LIMITS)
     const c = challenge()
     guard.authorize(c)

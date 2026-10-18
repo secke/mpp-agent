@@ -32,7 +32,7 @@ const challenge = (amount = '500000', id = 'c1') =>
   }) as never
 
 describe('createChallengeHandler', () => {
-  it('autorise et renvoie le Credential produit par le SDK', async () => {
+  it('authorizes and returns the Credential produced by the SDK', async () => {
     const guard = new BudgetGuard(LIMITS)
     const createCredential = vi.fn(async () => 'Payment eyJ...')
     const handler = createChallengeHandler(guard)
@@ -42,7 +42,7 @@ describe('createChallengeHandler', () => {
     expect(guard.reserved).toBe(500000n)
   })
 
-  it('refuse sans jamais demander de signature', async () => {
+  it('refuses without ever requesting a signature', async () => {
     const guard = new BudgetGuard(LIMITS)
     const createCredential = vi.fn(async () => 'Payment eyJ...')
     const handler = createChallengeHandler(guard)
@@ -50,14 +50,14 @@ describe('createChallengeHandler', () => {
     await expect(handler(challenge('1000001'), { createCredential })).rejects.toBeInstanceOf(
       BudgetDenied,
     )
-    // Le point clé : aucune signature n'a été demandée.
+    // The key point: no signature was requested.
     expect(createCredential).not.toHaveBeenCalled()
     expect(guard.reserved).toBe(0n)
   })
 
-  it('rend l’engagement si la création du Credential échoue', async () => {
+  it('gives the commitment back if Credential creation fails', async () => {
     const guard = new BudgetGuard(LIMITS)
-    const boom = new Error('solde insuffisant')
+    const boom = new Error('insufficient balance')
     const handler = createChallengeHandler(guard)
 
     await expect(
@@ -73,17 +73,17 @@ describe('createChallengeHandler', () => {
 })
 
 describe('createPayingClient', () => {
-  const account = privateKeyToAccount(generatePrivateKey()) // jamais financé
+  const account = privateKeyToAccount(generatePrivateKey()) // never funded
 
-  it('ne patche pas globalThis.fetch (polyfill: false)', () => {
+  it('does not patch globalThis.fetch (polyfill: false)', () => {
     const before = globalThis.fetch
     createPayingClient({ account, guard: new BudgetGuard(LIMITS) })
     expect(globalThis.fetch).toBe(before)
   })
 
-  it('propage le refus du guard hors de mppx.fetch', async () => {
+  it('propagates the guard refusal out of mppx.fetch', async () => {
     const app = createApp(TEST_CONFIG)
-    // Enveloppe de 0,10 : le prix du provider (0,50) est hors budget.
+    // Envelope of 0.10: the provider price (0.50) is out of budget.
     const guard = new BudgetGuard({
       ...LIMITS,
       maxPerCall: toBaseUnits('0.10', 6),
@@ -102,7 +102,7 @@ describe('createPayingClient', () => {
     expect(guard.committed).toBe(0n)
   })
 
-  it('ne rejoue pas la requête quand le guard refuse', async () => {
+  it('does not replay the request when the guard refuses', async () => {
     const app = createApp(TEST_CONFIG)
     const guard = new BudgetGuard({
       ...LIMITS,
@@ -120,17 +120,17 @@ describe('createPayingClient', () => {
     })
 
     await mppx.fetch('http://api.test/v1/search?q=mpp').catch(() => undefined)
-    // Une seule requête : celle qui a reçu le 402. Aucune tentative payante.
+    // A single request: the one that received the 402. No paying attempt.
     expect(calls).toBe(1)
   })
 
-  it('voit le Challenge réellement émis par le provider', async () => {
+  it('sees the Challenge actually issued by the provider', async () => {
     const app = createApp(TEST_CONFIG)
     const guard = new BudgetGuard(LIMITS)
     const seen: unknown[] = []
     const spy = vi.spyOn(guard, 'authorize').mockImplementation((c) => {
       seen.push(c)
-      throw new BudgetDenied('per-call-cap', 'refus de test')
+      throw new BudgetDenied('per-call-cap', 'test refusal')
     })
     const { mppx } = createPayingClient({
       account,

@@ -10,8 +10,8 @@ scrape_configs:
     static_configs:
       - targets: ["server:8787"]
 
-  # Agent : processus éphémère. La cible passe « down » hors des runs ; la
-  # série reste interrogeable dans l'historique (voir docs/features/observabilite.md).
+  # Agent: ephemeral process. The target goes "down" outside runs; the
+  # series stays queryable in history (see docs/features/observability.md).
   - job_name: mpp-agent
     metrics_path: /metrics
     scrape_interval: 10s

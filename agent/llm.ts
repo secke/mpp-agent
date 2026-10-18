@@ -1,16 +1,16 @@
 /**
- * Accès au modèle, via l'API DeepSeek (format compatible OpenAI).
+ * Model access, via the DeepSeek API (OpenAI-compatible format).
  *
- * Sources :
- * - base_url et modèles : https://api-docs.deepseek.com/
- *   « The DeepSeek API uses an API format compatible with OpenAI/Anthropic. »
- *   base_url (OpenAI) = https://api.deepseek.com ; modèles `deepseek-flash`,
- *   `deepseek-v4-pro`. Vérifié via GET https://api.deepseek.com/models.
+ * Sources:
+ * - base_url and models: https://api-docs.deepseek.com/
+ *   "The DeepSeek API uses an API format compatible with OpenAI/Anthropic."
+ *   base_url (OpenAI) = https://api.deepseek.com; models `deepseek-flash`,
+ *   `deepseek-v4-pro`. Verified via GET https://api.deepseek.com/models.
  * - Tool calls : https://api-docs.deepseek.com/guides/tool_calls
  *
- * Le reste de l'agent ne dépend pas du SDK OpenAI : il parle au type
- * `LlmClient` ci-dessous. C'est ce qui permet de tester la boucle sans réseau
- * ni crédit, et de changer de fournisseur sans toucher à la logique.
+ * The rest of the agent does not depend on the OpenAI SDK: it talks to the
+ * `LlmClient` type below. This is what makes it possible to test the loop
+ * without a network or credit, and to switch provider without touching the logic.
  */
 import OpenAI from 'openai'
 
@@ -18,7 +18,7 @@ export class LlmError extends Error {
   override name = 'LlmError'
 }
 
-/** Un outil exposé au modèle. Schéma JSON standard. */
+/** A tool exposed to the model. Standard JSON schema. */
 export type ToolSpec = {
   readonly name: string
   readonly description: string
@@ -28,7 +28,7 @@ export type ToolSpec = {
 export type ToolCall = {
   readonly id: string
   readonly name: string
-  /** Arguments bruts, tels que renvoyés par le modèle (JSON non validé). */
+  /** Raw arguments, as returned by the model (unvalidated JSON). */
   readonly arguments: string
 }
 
@@ -43,7 +43,7 @@ export type AssistantTurn = {
   readonly finishReason: string
 }
 
-/** Port minimal vers le modèle. Un mock de test implémente ceci en 5 lignes. */
+/** Minimal port to the model. A test mock implements this in 5 lines. */
 export type LlmClient = {
   turn(messages: readonly LlmMessage[], tools: readonly ToolSpec[]): Promise<AssistantTurn>
 }
@@ -54,21 +54,21 @@ export type LlmConfig = {
   readonly model: string
   readonly maxTokens: number
   /**
-   * Mode « thinking » de DeepSeek. Désactivé par défaut ici : il consomme des
-   * tokens de raisonnement sans bénéfice pour une boucle d'outils aussi
-   * cadrée, et rend les réponses moins déterministes à tester.
+   * DeepSeek "thinking" mode. Disabled by default here: it burns reasoning
+   * tokens with no benefit for such a tightly framed tool loop, and makes
+   * responses less deterministic to test.
    */
   readonly thinking: boolean
   /**
-   * Transport injectable. Par défaut celui du SDK OpenAI.
-   * Sert aux tests à intercepter la requête sans toucher au réseau.
+   * Injectable transport. Defaults to the OpenAI SDK's own.
+   * Lets tests intercept the request without touching the network.
    */
   readonly fetch?: typeof globalThis.fetch | undefined
 }
 
 export function loadLlmConfig(env: NodeJS.ProcessEnv = process.env): LlmConfig {
   const apiKey = env['DEEPSEEK_API_KEY']
-  if (!apiKey) throw new LlmError('DEEPSEEK_API_KEY est requis (voir .env.example)')
+  if (!apiKey) throw new LlmError('DEEPSEEK_API_KEY is required (see .env.example)')
   return {
     apiKey,
     baseUrl: env['DEEPSEEK_BASE_URL'] ?? 'https://api.deepseek.com',
@@ -78,7 +78,7 @@ export function loadLlmConfig(env: NodeJS.ProcessEnv = process.env): LlmConfig {
   }
 }
 
-/** Traduit nos messages vers le format Chat Completions. */
+/** Translates our messages to the Chat Completions format. */
 function toApiMessages(messages: readonly LlmMessage[]): unknown[] {
   return messages.map((message) => {
     switch (message.role) {
@@ -113,7 +113,7 @@ export function createLlm(config: LlmConfig): LlmClient {
 
   return {
     async turn(messages, tools) {
-      // `thinking` est une extension DeepSeek absente des types OpenAI :
+      // `thinking` is a DeepSeek extension absent from the OpenAI types:
       // https://api-docs.deepseek.com/guides/thinking_mode
       const params = {
         model: config.model,
@@ -145,7 +145,7 @@ export function createLlm(config: LlmConfig): LlmClient {
           }
         | undefined
 
-      if (!choice?.message) throw new LlmError('Réponse du modèle sans message exploitable')
+      if (!choice?.message) throw new LlmError('Model response without a usable message')
 
       return {
         content: choice.message.content ?? null,

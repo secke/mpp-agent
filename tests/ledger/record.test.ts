@@ -29,7 +29,7 @@ describe('Ledger', () => {
     ledger = new Ledger(openLedger(':memory:'))
   })
 
-  it('écrit une ligne « challenged » avec les termes du paiement', () => {
+  it('writes a "challenged" row with the payment terms', () => {
     const c = challenge()
     ledger.recordChallenge(c, 'api.test')
 
@@ -42,7 +42,7 @@ describe('Ledger', () => {
     expect(row.reference).toBeNull()
   })
 
-  it('est idempotent : rejouer le même Challenge ne duplique pas de ligne', () => {
+  it('is idempotent: replaying the same Challenge does not duplicate a row', () => {
     const c = challenge()
     ledger.recordChallenge(c, 'api.test')
     ledger.recordChallenge(c, 'api.test')
@@ -50,10 +50,10 @@ describe('Ledger', () => {
     expect(ledger.all()).toHaveLength(1)
   })
 
-  it('compte les occurrences plutôt que de les perdre', () => {
-    // Deux requêtes identiques dans la même milliseconde partagent leur id
-    // (l'id est un HMAC de ses paramètres). Sans compteur, la réconciliation
-    // sous-estimerait le trafic — mesuré : 19 collisions sur 50 requêtes.
+  it('counts occurrences rather than losing them', () => {
+    // Two identical requests within the same millisecond share their id
+    // (the id is an HMAC of its parameters). Without a counter, reconciliation
+    // would underestimate traffic — measured: 19 collisions out of 50 requests.
     const c = challenge()
     ledger.recordChallenge(c, 'api.test')
     ledger.recordChallenge(c, 'api.test')
@@ -64,7 +64,7 @@ describe('Ledger', () => {
     expect(challenged).toMatchObject({ entries: 1, occurrences: 3, total_base_units: 1500000 })
   })
 
-  it('passe à « success » avec la référence de transaction et le payeur', () => {
+  it('moves to "success" with the transaction reference and the payer', () => {
     const c = challenge()
     ledger.recordChallenge(c, 'api.test')
     ledger.recordSuccess({
@@ -80,7 +80,7 @@ describe('Ledger', () => {
     expect(row.error_code).toBeNull()
   })
 
-  it('passe à « failed » avec le code MPP normalisé', () => {
+  it('moves to "failed" with the normalized MPP code', () => {
     const c = challenge()
     ledger.recordChallenge(c, 'api.test')
     ledger.recordFailure({ challengeId: c.id, error: new VerificationFailedError() })
@@ -90,7 +90,7 @@ describe('Ledger', () => {
     expect(row.error_code).toBe('verification-failed')
   })
 
-  it('ne stocke ni le message d’erreur ni ses détails', () => {
+  it('stores neither the error message nor its details', () => {
     const c = challenge()
     const error = new VerificationFailedError({
       details: { credential: 'Payment eyJzZWNyZXQi', txHash: '0xdeadbeef' },
@@ -105,7 +105,7 @@ describe('Ledger', () => {
     expect(ledger.get(c.id)!.error_code).toBe('verification-failed')
   })
 
-  it('ne fait jamais régresser un paiement abouti', () => {
+  it('never regresses a completed payment', () => {
     const c = challenge()
     ledger.recordChallenge(c, 'api.test')
     ledger.recordSuccess({ challengeId: c.id, reference: '0xabc' })
@@ -116,12 +116,12 @@ describe('Ledger', () => {
     expect(row.error_code).toBeNull()
   })
 
-  it('tolère un settle sur un Challenge inconnu sans lever', () => {
-    expect(() => ledger.recordSuccess({ challengeId: 'jamais-vu', reference: '0x1' })).not.toThrow()
+  it('tolerates a settle on an unknown Challenge without throwing', () => {
+    expect(() => ledger.recordSuccess({ challengeId: 'never-seen', reference: '0x1' })).not.toThrow()
     expect(ledger.all()).toHaveLength(0)
   })
 
-  it('réconcilie par statut', () => {
+  it('reconciles by status', () => {
     const paid = challenge('500000')
     ledger.recordChallenge(paid, 'api.test')
     ledger.recordSuccess({ challengeId: paid.id, reference: '0x1' })
@@ -138,7 +138,7 @@ describe('Ledger', () => {
     expect(byStatus['challenged']).toMatchObject({ entries: 1, total_base_units: 100000 })
   })
 
-  it('liste les Challenges restés sans suite', () => {
+  it('lists the Challenges left unresolved', () => {
     const paid = challenge()
     ledger.recordChallenge(paid, 'api.test')
     ledger.recordSuccess({ challengeId: paid.id, reference: '0x1' })
@@ -152,12 +152,12 @@ describe('Ledger', () => {
 })
 
 describe('normalizeErrorCode', () => {
-  it('extrait le code de l’URI de problème MPP', () => {
+  it('extracts the code from the MPP problem URI', () => {
     expect(normalizeErrorCode(new VerificationFailedError())).toBe('verification-failed')
     expect(normalizeErrorCode(new InvalidChallengeError())).toBe('invalid-challenge')
   })
 
-  it('retombe sur le nom puis sur « unknown »', () => {
+  it('falls back to the name then to "unknown"', () => {
     expect(normalizeErrorCode(new TypeError('x'))).toBe('TypeError')
     expect(normalizeErrorCode(null)).toBe('unknown')
     expect(normalizeErrorCode({})).toBe('unknown')

@@ -1,9 +1,9 @@
 /**
- * Construction du store anti-rejeu à partir de la configuration.
+ * Builds the replay store from the configuration.
  *
- * Partagé entre le point d'entrée et les tests e2e, pour que le test exerce
- * exactement le câblage de production — un test qui monterait un store
- * différent ne prouverait rien sur ce qui tourne réellement.
+ * Shared between the entry point and the e2e tests, so that the test exercises
+ * exactly the production wiring — a test mounting a different store would
+ * prove nothing about what actually runs.
  */
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
@@ -32,6 +32,6 @@ export async function createReplayStore(config: Config): Promise<ReplayStore> {
     return { store: redisStore(client), close: () => client.close() }
   }
 
-  // memory : `loadConfig` a déjà exigé un acquittement explicite.
+  // memory: `loadConfig` has already required an explicit acknowledgement.
   return { store: undefined, close: async () => {} }
 }

@@ -21,14 +21,14 @@ function setup() {
 }
 
 describe('metrics-server (agent)', () => {
-  it('refuse sans jeton valide', async () => {
+  it('refuses without a valid token', async () => {
     const app = createMetricsApp(setup().metrics, TOKEN)
     expect((await app.request('http://a/metrics')).status).toBe(401)
     const bad = { headers: { Authorization: 'Bearer nope' } }
     expect((await app.request('http://a/metrics', bad)).status).toBe(401)
   })
 
-  it("expose la dépense et le budget restant de l'agent", async () => {
+  it("exposes the agent's spend and remaining budget", async () => {
     const app = createMetricsApp(setup().metrics, TOKEN)
     const res = await app.request('http://a/metrics', {
       headers: { Authorization: `Bearer ${TOKEN}` },
@@ -40,7 +40,7 @@ describe('metrics-server (agent)', () => {
     expect(text).not.toContain(TOKEN)
   })
 
-  it('écoute réellement sur un port et se ferme', async () => {
+  it('actually listens on a port and closes', async () => {
     const server = await startMetricsServer(setup().metrics, { port: 0, token: TOKEN })
     const url = `http://127.0.0.1:${server.port}/metrics`
     expect((await fetch(url)).status).toBe(401)

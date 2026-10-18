@@ -1,9 +1,9 @@
 /**
- * Second service vendu : analyse d'un texte fourni dans le corps de la requête.
+ * Second service sold: analysis of a text supplied in the request body.
  *
- * Son intérêt en phase 8 n'est pas l'analyse elle-même — elle est
- * délibérément triviale — mais le fait qu'elle **prenne un corps**, ce qui
- * permet d'exercer la liaison du corps au Challenge (voir server/app.ts).
+ * Its point in phase 8 is not the analysis itself — it is deliberately
+ * trivial — but the fact that it **takes a body**, which makes it possible to
+ * exercise binding the body to the Challenge (see server/app.ts).
  */
 export type Analysis = {
   readonly characters: number

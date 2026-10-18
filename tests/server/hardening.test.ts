@@ -18,7 +18,7 @@ const post = (body: unknown, headers: Record<string, string> = {}) =>
 const challengeOf = async (body: unknown) =>
   Challenge.deserialize((await post(body)).headers.get('WWW-Authenticate')!)
 
-/** Credential syntaxiquement valide, payload `proof` (vérifié hors-chaîne). */
+/** Syntactically valid Credential, `proof` payload (verified off-chain). */
 const credentialFor = (challenge: Challenge.Challenge) =>
   Credential.serialize(
     Credential.from({
@@ -33,9 +33,9 @@ const problemType = async (response: Response) => {
   return body.type?.split('/').pop()
 }
 
-describe('liaison du corps de requête', () => {
-  it('lie le digest du corps au Challenge via `scope`', async () => {
-    const body = { text: 'corps original' }
+describe('request body binding', () => {
+  it('binds the body digest to the Challenge via `scope`', async () => {
+    const body = { text: 'original body' }
     const challenge = await challengeOf(body)
     const opaque = JSON.parse(
       Buffer.from(String(challenge.opaque), 'base64url').toString(),
@@ -46,29 +46,29 @@ describe('liaison du corps de requête', () => {
     )
   })
 
-  it('émet des Challenges différents pour des corps différents', async () => {
+  it('issues different Challenges for different bodies', async () => {
     const a = await challengeOf({ text: 'A' })
     const b = await challengeOf({ text: 'B' })
     expect(a.id).not.toBe(b.id)
   })
 
-  it('rejette un Credential redéposé avec un corps modifié', async () => {
-    // Le cœur de l'exigence : un client ne doit pas pouvoir changer le corps
-    // après avoir reçu le Challenge.
-    // Source : https://mpp.dev/advanced/security
-    const original = { text: 'corps original' }
+  it('rejects a Credential resubmitted with a modified body', async () => {
+    // The heart of the requirement: a client must not be able to change the
+    // body after receiving the Challenge.
+    // Source: https://mpp.dev/advanced/security
+    const original = { text: 'original body' }
     const credential = credentialFor(await challengeOf(original))
 
-    const swapped = await post({ text: 'corps SUBSTITUE' }, { Authorization: credential })
+    const swapped = await post({ text: 'SWAPPED body' }, { Authorization: credential })
     expect(swapped.status).toBe(402)
     expect(await problemType(swapped)).toBe('invalid-challenge')
   })
 
-  it('accepte le Challenge quand le corps est inchangé', async () => {
-    // Même Credential bidon, bon corps : le Challenge passe la liaison et
-    // l'échec porte désormais sur la preuve de paiement, pas sur le Challenge.
-    // C'est ce contraste qui prouve que la liaison discrimine bien le corps.
-    const original = { text: 'corps original' }
+  it('accepts the Challenge when the body is unchanged', async () => {
+    // Same bogus Credential, right body: the Challenge passes the binding and
+    // the failure is now about the payment proof, not the Challenge.
+    // This contrast is what proves the binding really discriminates the body.
+    const original = { text: 'original body' }
     const credential = credentialFor(await challengeOf(original))
 
     const same = await post(original, { Authorization: credential })
@@ -76,56 +76,56 @@ describe('liaison du corps de requête', () => {
     expect(await problemType(same)).toBe('verification-failed')
   })
 
-  it('sert la route POST derrière un paiement', async () => {
-    const response = await post({ text: 'bonjour' })
+  it('serves the POST route behind a payment', async () => {
+    const response = await post({ text: 'hello' })
     expect(response.status).toBe(402)
     expect(response.headers.get('WWW-Authenticate')).toMatch(/^Payment /)
     expect(response.headers.get('Cache-Control')).toBe('no-store')
   })
 })
 
-describe('Cache-Control sur les réponses payées', () => {
-  it('pose `private` sur un 200 porteur d’un Payment-Receipt', async () => {
-    // On simule la réponse finale : le middleware est global, donc il suffit
-    // qu'une réponse 200 porte l'en-tête Receipt pour être marquée `private`.
+describe('Cache-Control on paid responses', () => {
+  it('sets `private` on a 200 carrying a Payment-Receipt', async () => {
+    // We simulate the final response: the middleware is global, so it is enough
+    // for a 200 response to carry the Receipt header to be marked `private`.
     const probe = createApp(TEST_CONFIG)
-    probe.get('/faux-paye', (c) => {
+    probe.get('/fake-paid', (c) => {
       c.header('Payment-Receipt', 'eyJzdGF0dXMiOiJzdWNjZXNzIn0')
       return c.json({ ok: true })
     })
 
-    const response = await probe.request(url('/faux-paye'))
+    const response = await probe.request(url('/fake-paid'))
     expect(response.status).toBe(200)
     expect(response.headers.get('Cache-Control')).toBe('private')
   })
 
-  it('ne touche pas aux réponses sans Receipt', async () => {
+  it('leaves responses without a Receipt alone', async () => {
     const response = await app.request(url('/healthz'))
     expect(response.status).toBe(200)
     expect(response.headers.get('Cache-Control')).toBeNull()
   })
 
-  it('laisse `no-store` sur les 402', async () => {
+  it('keeps `no-store` on 402s', async () => {
     const response = await app.request(url('/v1/search?q=mpp'))
     expect(response.status).toBe(402)
     expect(response.headers.get('Cache-Control')).toBe('no-store')
   })
 })
 
-describe('garde-fous de configuration du store anti-rejeu', () => {
-  it('refuse le store mémoire sans acquittement explicite', () => {
+describe('replay store configuration guards', () => {
+  it('refuses the memory store without an explicit acknowledgement', () => {
     expect(() => loadConfig(env({ REPLAY_STORE: 'memory' }))).toThrow(ConfigError)
-    expect(() => loadConfig(env({ REPLAY_STORE: 'memory' }))).toThrow(/rejouable/)
+    expect(() => loadConfig(env({ REPLAY_STORE: 'memory' }))).toThrow(/replayable/)
   })
 
-  it('accepte le store mémoire quand le risque est acquitté', () => {
+  it('accepts the memory store when the risk is acknowledged', () => {
     const config = loadConfig(
       env({ REPLAY_STORE: 'memory', REPLAY_STORE_MEMORY_ACK: 'i-know' }),
     )
     expect(config.replayStore).toBe('memory')
   })
 
-  it('exige REDIS_URL pour le store redis', () => {
+  it('requires REDIS_URL for the redis store', () => {
     expect(() => loadConfig(env({ REPLAY_STORE: 'redis' }))).toThrow(/REDIS_URL/)
     expect(
       loadConfig(env({ REPLAY_STORE: 'redis', REDIS_URL: 'redis://localhost:6379' }))
@@ -133,11 +133,11 @@ describe('garde-fous de configuration du store anti-rejeu', () => {
     ).toBe('redis')
   })
 
-  it('refuse un support inconnu', () => {
-    expect(() => loadConfig(env({ REPLAY_STORE: 'postgres' }))).toThrow(/inconnu/)
+  it('refuses an unknown backend', () => {
+    expect(() => loadConfig(env({ REPLAY_STORE: 'postgres' }))).toThrow(/unknown/)
   })
 
-  it('utilise sqlite par défaut — pas la mémoire', () => {
+  it('uses sqlite by default — not memory', () => {
     const { REPLAY_STORE: _omit, ...rest } = env()
     expect(loadConfig(rest).replayStore).toBe('sqlite')
   })

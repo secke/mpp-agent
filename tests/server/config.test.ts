@@ -4,33 +4,33 @@ import { ConfigError, loadConfig } from '../../server/config.ts'
 import { env } from '../helpers.ts'
 
 describe('loadConfig', () => {
-  it('accepte une configuration testnet valide', () => {
+  it('accepts a valid testnet configuration', () => {
     const config = loadConfig(env())
     expect(config.realm).toBe('api.test')
     expect(config.searchPrice).toBe('0.50')
     expect(config.port).toBe(8787)
   })
 
-  it('refuse tout réseau autre que testnet', () => {
+  it('refuses any network other than testnet', () => {
     expect(() => loadConfig(env({ MPP_NETWORK: 'mainnet' }))).toThrow(ConfigError)
-    expect(() => loadConfig(env({ MPP_NETWORK: 'mainnet' }))).toThrow(/testnet uniquement/)
+    expect(() => loadConfig(env({ MPP_NETWORK: 'mainnet' }))).toThrow(/testnet only/)
   })
 
-  it('refuse un MPP_SECRET_KEY de moins de 32 octets', () => {
-    expect(() => loadConfig(env({ MPP_SECRET_KEY: 'trop-court' }))).toThrow(/32 octets/)
+  it('refuses a MPP_SECRET_KEY shorter than 32 bytes', () => {
+    expect(() => loadConfig(env({ MPP_SECRET_KEY: 'too-short' }))).toThrow(/32 bytes/)
   })
 
-  it('refuse une adresse destinataire malformée', () => {
-    expect(() => loadConfig(env({ MPP_RECIPIENT: 'pas-une-adresse' }))).toThrow(/adresse 0x/)
+  it('refuses a malformed recipient address', () => {
+    expect(() => loadConfig(env({ MPP_RECIPIENT: 'not-an-address' }))).toThrow(/valid 0x address/)
   })
 
-  it('refuse un prix malformé ou trop précis', () => {
+  it('refuses a malformed or over-precise price', () => {
     expect(() => loadConfig(env({ MPP_SEARCH_PRICE: '1e-3' }))).toThrow(/MPP_SEARCH_PRICE/)
     expect(() => loadConfig(env({ MPP_SEARCH_PRICE: '0.1234567' }))).toThrow(/MPP_SEARCH_PRICE/)
   })
 
-  it('exige les variables obligatoires', () => {
-    expect(() => loadConfig(env({ MPP_SECRET_KEY: undefined }))).toThrow(/MPP_SECRET_KEY est requis/)
-    expect(() => loadConfig(env({ MPP_RECIPIENT: undefined }))).toThrow(/MPP_RECIPIENT est requis/)
+  it('requires the mandatory variables', () => {
+    expect(() => loadConfig(env({ MPP_SECRET_KEY: undefined }))).toThrow(/MPP_SECRET_KEY is required/)
+    expect(() => loadConfig(env({ MPP_RECIPIENT: undefined }))).toThrow(/MPP_RECIPIENT is required/)
   })
 })

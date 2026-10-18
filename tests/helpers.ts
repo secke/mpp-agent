@@ -1,6 +1,6 @@
 import type { Config } from '../server/config.ts'
 
-/** Secret de test : 38 octets, au-dessus du minimum de 32 imposé par mppx. */
+/** Test secret: 38 bytes, above the 32-byte minimum enforced by mppx. */
 export const TEST_SECRET = 'test-secret-key-for-vitest-32-bytes-ok'
 
 export const TEST_CONFIG: Config = {

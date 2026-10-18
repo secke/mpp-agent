@@ -1,23 +1,23 @@
-# Fonctionnalités
+# Features
 
-Une fiche par fonctionnalité livrée. Chaque fiche décrit : ce que ça fait,
-pourquoi, comment s'en servir, où est le code, comment c'est testé.
+One page per delivered feature. Each page describes: what it does,
+why, how to use it, where the code is, how it is tested.
 
-| Fiche | Phase | État |
+| Page | Phase | Status |
 |---|---|---|
-| [Configuration et garde-fou réseau](configuration.md) | 1 | ✅ livré |
-| [Endpoint payant et flux 402](endpoint-payant.md) | 1 | ✅ livré |
-| [Garde-fou testnet](garde-fou-testnet.md) | 1 | ✅ livré |
-| [Découverte OpenAPI](decouverte-openapi.md) | 1 | ✅ livré |
-| [Budget guard](budget-guard.md) | 2 | ✅ livré |
-| [Agent payeur](agent-payeur.md) | 2 | ✅ livré |
-| [Ledger — journal d'audit](ledger.md) | 3 | ✅ livré |
-| [Agent LLM — le modèle décide d'acheter](agent-llm.md) | 4 | ✅ livré |
-| [E2E testnet — le paiement réel](e2e-testnet.md) | 5 | ✅ livré |
-| [Anti-rejeu — stores partagés](anti-rejeu.md) | 8 | ✅ livré |
-| [Durcissement — corps, cache, revue](durcissement.md) | 8 | ✅ livré |
-| [Observabilité Prometheus](observabilite.md) | 6 | ✅ |
-| [Docker Compose](docker.md) | 7 | ✅ |
+| [Configuration and network guard](configuration.md) | 1 | ✅ delivered |
+| [Paid endpoint and 402 flow](paid-endpoint.md) | 1 | ✅ delivered |
+| [Testnet guard](testnet-guard.md) | 1 | ✅ delivered |
+| [OpenAPI discovery](openapi-discovery.md) | 1 | ✅ delivered |
+| [Budget guard](budget-guard.md) | 2 | ✅ delivered |
+| [Paying agent](paying-agent.md) | 2 | ✅ delivered |
+| [Ledger — audit log](ledger.md) | 3 | ✅ delivered |
+| [LLM agent — the model decides to buy](agent-llm.md) | 4 | ✅ delivered |
+| [Testnet E2E — the real payment](e2e-testnet.md) | 5 | ✅ delivered |
+| [Replay protection — shared stores](replay-protection.md) | 8 | ✅ delivered |
+| [Hardening — body, cache, review](hardening.md) | 8 | ✅ delivered |
+| [Prometheus observability](observability.md) | 6 | ✅ delivered |
+| [Docker Compose](docker.md) | 7 | ✅ delivered |
 
-Référence protocole : [`../NOTES.md`](../NOTES.md).
-Décisions d'architecture : [`../DECISIONS.md`](../DECISIONS.md).
+Protocol reference: [`../NOTES.md`](../NOTES.md).
+Architecture decisions: [`../DECISIONS.md`](../DECISIONS.md).

@@ -1,14 +1,14 @@
 /**
- * Outils exposés au modèle.
+ * Tools exposed to the model.
  *
- * Deux invariants :
- *  1. **Le modèle propose, le budget guard dispose.** Un refus du guard revient
- *     au modèle sous forme de `tool_result` structuré — pas d'exception. Le
- *     modèle doit pouvoir en tenir compte (abandonner, reformuler, s'arrêter),
- *     ce qu'une exception qui casse la boucle ne permet pas.
- *  2. **Rien de sensible ne remonte au modèle.** Pas de clé privée, pas de
- *     Credential, pas de Receipt brut. Le résultat ne contient que les données
- *     achetées et le montant réellement dépensé.
+ * Two invariants:
+ *  1. **The model proposes, the budget guard disposes.** A guard refusal comes
+ *     back to the model as a structured `tool_result` — not an exception. The
+ *     model must be able to take it into account (give up, rephrase, stop),
+ *     which an exception breaking the loop does not allow.
+ *  2. **Nothing sensitive reaches the model.** No private key, no Credential,
+ *     no raw Receipt. The result only contains the purchased data and the
+ *     amount actually spent.
  */
 import { fromBaseUnits } from './amount.ts'
 import { BudgetDenied, type BudgetGuard } from './budget.ts'
@@ -17,15 +17,15 @@ import type { ToolCall, ToolSpec } from './llm.ts'
 export const SEARCH_TOOL: ToolSpec = {
   name: 'search_marketplace',
   description:
-    "Effectue une recherche documentaire sur la place de marché. Cet appel est PAYANT : " +
-    'il déclenche un paiement en stablecoin depuis le budget de l’agent. ' +
-    "N'appelle cet outil que si la question l'exige réellement, et une seule fois par sujet.",
+    'Runs a document search on the marketplace. This call is PAID: ' +
+    "it triggers a stablecoin payment from the agent's budget. " +
+    'Only call this tool if the question really requires it, and only once per topic.',
   parameters: {
     type: 'object',
     properties: {
       query: {
         type: 'string',
-        description: 'La requête de recherche, en langage naturel.',
+        description: 'The search query, in natural language.',
       },
     },
     required: ['query'],
@@ -37,15 +37,15 @@ export type ToolResult =
   | { readonly ok: true; readonly data: unknown }
   | {
       readonly ok: false
-      /** Code stable, pour que le modèle distingue « réessaie » de « abandonne ». */
+      /** Stable code, so the model can tell "retry" from "give up". */
       readonly code: string
       readonly message: string
-      /** Ce que le modèle est censé faire de ce refus. */
+      /** What the model is expected to do with this refusal. */
       readonly hint: string
       readonly retryable: boolean
     }
 
-/** Fonction de recherche payante injectée (le `mppx.fetch` de l'agent). */
+/** Injected paid search function (the agent's `mppx.fetch`). */
 export type SearchFn = (query: string) => Promise<unknown>
 
 export type ToolExecutorOptions = {
@@ -53,7 +53,7 @@ export type ToolExecutorOptions = {
   readonly guard: BudgetGuard
 }
 
-/** Les refus de budget qui ne servent à rien de réessayer. */
+/** Budget refusals that are pointless to retry. */
 const TERMINAL_DENIALS = new Set(['budget-exhausted', 'per-call-cap'])
 
 function parseArguments(call: ToolCall): { query?: unknown } | null {
@@ -71,8 +71,8 @@ export function createToolExecutor({ search, guard }: ToolExecutorOptions) {
       return {
         ok: false,
         code: 'unknown-tool',
-        message: `Outil inconnu : ${call.name}`,
-        hint: `Seul ${SEARCH_TOOL.name} est disponible.`,
+        message: `Unknown tool: ${call.name}`,
+        hint: `Only ${SEARCH_TOOL.name} is available.`,
         retryable: false,
       }
 
@@ -82,8 +82,8 @@ export function createToolExecutor({ search, guard }: ToolExecutorOptions) {
       return {
         ok: false,
         code: 'invalid-arguments',
-        message: 'Le paramètre `query` est manquant ou vide.',
-        hint: 'Rappelle l’outil avec une chaîne `query` non vide.',
+        message: 'The `query` parameter is missing or empty.',
+        hint: 'Call the tool again with a non-empty `query` string.',
         retryable: true,
       }
 
@@ -94,8 +94,8 @@ export function createToolExecutor({ search, guard }: ToolExecutorOptions) {
         ok: true,
         data: {
           results: data,
-          // Le modèle voit ce qu'il a dépensé : c'est une information dont il
-          // a besoin pour décider s'il continue. Rien d'autre du paiement.
+          // The model sees what it spent: it needs this to decide whether to
+          // continue. Nothing else about the payment.
           spent: fromBaseUnits(guard.committed - before, guard.limits.decimals),
           budgetRemaining: guard.snapshot().remaining,
         },
@@ -107,18 +107,18 @@ export function createToolExecutor({ search, guard }: ToolExecutorOptions) {
           code: error.code,
           message: error.message,
           hint: TERMINAL_DENIALS.has(error.code)
-            ? 'Le budget ne permet pas cet achat. N’insiste pas : réponds avec ce que tu sais déjà, en signalant la limite.'
-            : 'Cette offre de paiement a été refusée par la politique de dépense. Ne réessaie pas à l’identique.',
+            ? 'The budget does not allow this purchase. Do not insist: answer with what you already know, and mention the limit.'
+            : 'This payment offer was refused by the spending policy. Do not retry it unchanged.',
           retryable: false,
         }
 
-      // Panne (réseau, signature, provider). On ne divulgue pas le détail au
-      // modèle : le message d'erreur brut peut contenir des données de paiement.
+      // Outage (network, signing, provider). We do not disclose the detail to
+      // the model: the raw error message may contain payment data.
       return {
         ok: false,
         code: 'search-unavailable',
-        message: 'La recherche a échoué pour une raison technique.',
-        hint: 'Tu peux réessayer une fois, puis répondre sans cet outil.',
+        message: 'The search failed for a technical reason.',
+        hint: 'You may retry once, then answer without this tool.',
         retryable: true,
       }
     }

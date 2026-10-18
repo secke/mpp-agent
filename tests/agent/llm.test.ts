@@ -11,7 +11,7 @@ const CONFIG = {
   thinking: false,
 }
 
-/** Capture le corps envoyé et rend une réponse Chat Completions figée. */
+/** Captures the body sent and returns a canned Chat Completions response. */
 function intercept(response: unknown) {
   const sent: Record<string, unknown>[] = []
   const fetch = (async (_url: string, init: { body?: string }) => {
@@ -31,21 +31,21 @@ const reply = (message: unknown, finish = 'stop') => ({
 })
 
 describe('loadLlmConfig', () => {
-  it('applique les valeurs par défaut documentées', () => {
+  it('applies the documented defaults', () => {
     const config = loadLlmConfig({ DEEPSEEK_API_KEY: 'sk-x' } as NodeJS.ProcessEnv)
-    // Source : https://api-docs.deepseek.com/ (base_url OpenAI, modèles).
+    // Source: https://api-docs.deepseek.com/ (OpenAI base_url, models).
     expect(config.baseUrl).toBe('https://api.deepseek.com')
     expect(config.model).toBe('deepseek-flash')
     expect(config.thinking).toBe(false)
   })
 
-  it('exige une clé', () => {
+  it('requires a key', () => {
     expect(() => loadLlmConfig({} as NodeJS.ProcessEnv)).toThrow(LlmError)
   })
 })
 
 describe('createLlm — traduction vers Chat Completions', () => {
-  it('envoie le modèle, la borne de tokens et le mode thinking', async () => {
+  it('sends the model, the token bound and the thinking mode', async () => {
     const { sent, fetch } = intercept(reply({ role: 'assistant', content: 'ok' }))
     const llm = createLlm({ ...CONFIG, fetch })
     await llm.turn([{ role: 'user', content: 'salut' }], [])
@@ -57,14 +57,14 @@ describe('createLlm — traduction vers Chat Completions', () => {
     })
   })
 
-  it('active le thinking quand il est demandé', async () => {
+  it('enables thinking when requested', async () => {
     const { sent, fetch } = intercept(reply({ role: 'assistant', content: 'ok' }))
     const llm = createLlm({ ...CONFIG, thinking: true, fetch })
     await llm.turn([{ role: 'user', content: 'salut' }], [])
     expect(sent[0]).toMatchObject({ thinking: { type: 'enabled' } })
   })
 
-  it('traduit les outils au format function calling', async () => {
+  it('translates tools to the function calling format', async () => {
     const { sent, fetch } = intercept(reply({ role: 'assistant', content: 'ok' }))
     const llm = createLlm({ ...CONFIG, fetch })
     await llm.turn([{ role: 'user', content: 'salut' }], [SEARCH_TOOL])
@@ -81,14 +81,14 @@ describe('createLlm — traduction vers Chat Completions', () => {
     ])
   })
 
-  it('n’envoie pas de champ `tools` quand il n’y en a pas', async () => {
+  it('sends no `tools` field when there are none', async () => {
     const { sent, fetch } = intercept(reply({ role: 'assistant', content: 'ok' }))
     const llm = createLlm({ ...CONFIG, fetch })
     await llm.turn([{ role: 'user', content: 'salut' }], [])
     expect(sent[0]).not.toHaveProperty('tools')
   })
 
-  it('traduit un tour assistant avec appels d’outils et le message tool', async () => {
+  it('translates an assistant turn with tool calls and the tool message', async () => {
     const { sent, fetch } = intercept(reply({ role: 'assistant', content: 'fini' }))
     const llm = createLlm({ ...CONFIG, fetch })
     const messages: LlmMessage[] = [
@@ -113,8 +113,8 @@ describe('createLlm — traduction vers Chat Completions', () => {
   })
 })
 
-describe('createLlm — lecture de la réponse', () => {
-  it('extrait les appels d’outils', async () => {
+describe('createLlm — reading the response', () => {
+  it('extracts the tool calls', async () => {
     const { fetch } = intercept(
       reply(
         {
@@ -140,14 +140,14 @@ describe('createLlm — lecture de la réponse', () => {
     ])
   })
 
-  it('normalise un contenu absent en null', async () => {
+  it('normalizes absent content to null', async () => {
     const { fetch } = intercept(reply({ role: 'assistant' }))
     const llm = createLlm({ ...CONFIG, fetch })
     const turn = await llm.turn([{ role: 'user', content: 'q' }], [])
     expect(turn).toMatchObject({ content: null, toolCalls: [] })
   })
 
-  it('lève sur une réponse inexploitable', async () => {
+  it('throws on an unusable response', async () => {
     const { fetch } = intercept({ id: 'x', choices: [] })
     const llm = createLlm({ ...CONFIG, fetch })
     await expect(llm.turn([{ role: 'user', content: 'q' }], [])).rejects.toBeInstanceOf(LlmError)

@@ -1,26 +1,26 @@
-# Provider MPP + Prometheus (+ agent à la demande).
-# Les secrets viennent de l'environnement de l'hôte / d'un fichier .env passé
-# à `docker compose` — jamais de l'image (voir Dockerfile, .dockerignore).
+# MPP provider + Prometheus (+ agent on demand).
+# Secrets come from the host environment / a .env file passed to
+# `docker compose` — never from the image (see Dockerfile, .dockerignore).
 #   docker compose up -d --build
-#   docker compose --profile agent run --rm agent "ta question"
+#   docker compose --profile agent run --rm --use-aliases agent "your question"
 
 services:
   server:
     build: .
     environment:
-      MPP_SECRET_KEY: ${MPP_SECRET_KEY:?MPP_SECRET_KEY requis}
-      MPP_RECIPIENT: ${MPP_RECIPIENT:?MPP_RECIPIENT requis}
+      MPP_SECRET_KEY: ${MPP_SECRET_KEY:?MPP_SECRET_KEY required}
+      MPP_RECIPIENT: ${MPP_RECIPIENT:?MPP_RECIPIENT required}
       MPP_REALM: ${MPP_REALM:-localhost}
       MPP_NETWORK: testnet
       PORT: "8787"
       LEDGER_PATH: /app/data/ledger.sqlite
       REPLAY_STORE: sqlite
       REPLAY_STORE_PATH: /app/data/replay.sqlite
-      METRICS_TOKEN: ${METRICS_TOKEN:?METRICS_TOKEN requis (>= 16 car.)}
+      METRICS_TOKEN: ${METRICS_TOKEN:?METRICS_TOKEN required (>= 16 chars)}
     volumes:
       - server-data:/app/data
     ports:
-      - "127.0.0.1:8787:8787"   # exposé en local uniquement
+      - "127.0.0.1:8787:8787"   # exposed locally only
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
@@ -50,16 +50,16 @@ services:
       AGENT_PRIVATE_KEY: ${AGENT_PRIVATE_KEY:-}
       MPP_NETWORK: testnet
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
-      # Export Prometheus : l'agent sert /metrics pendant le run puis le maintient.
+      # Prometheus export: the agent serves /metrics during the run, then keeps it up.
       AGENT_METRICS_PORT: "9464"
       AGENT_METRICS_LINGER: ${AGENT_METRICS_LINGER:-45}
-      METRICS_TOKEN: ${METRICS_TOKEN:?METRICS_TOKEN requis (>= 16 car.)}
+      METRICS_TOKEN: ${METRICS_TOKEN:?METRICS_TOKEN required (>= 16 chars)}
     depends_on:
       server:
         condition: service_healthy
 
 secrets:
-  # Même jeton que celui du serveur ; Prometheus le lit en fichier.
+  # Same token as the server's; Prometheus reads it from a file.
   metrics_token:
     environment: METRICS_TOKEN
 

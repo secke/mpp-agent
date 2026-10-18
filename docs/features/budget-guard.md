@@ -1,83 +1,83 @@
 # Budget guard
 
-**Phase 2** · Code : `agent/budget.ts`, `agent/amount.ts`
-· Tests : `tests/agent/budget.test.ts`, `tests/agent/amount.test.ts`
+**Phase 2** · Code: `agent/budget.ts`, `agent/amount.ts`
+· Tests: `tests/agent/budget.test.ts`, `tests/agent/amount.test.ts`
 
-## Ce que ça fait
+## What it does
 
-Décide si un Challenge reçu est payable. C'est **l'autorité finale** de
-l'agent : le modèle propose, le guard dispose.
+Decides whether a received Challenge is payable. It is the agent's **final
+authority**: the model proposes, the guard disposes.
 
-Sept motifs de refus, tous typés (`DenyCode`) :
+Seven refusal reasons, all typed (`DenyCode`):
 
-| Code | Déclencheur |
+| Code | Trigger |
 |---|---|
-| `unsupported-method` | autre chose que `tempo`/`charge` |
-| `unexpected-chain` | `methodDetails.chainId` ≠ 42431, ou absent |
-| `unexpected-currency` | devise ≠ pathUSD |
-| `unexpected-recipient` | destinataire hors liste blanche (si définie) |
-| `malformed-amount` | montant qui n'est pas une chaîne de chiffres |
-| `per-call-cap` | au-dessus du plafond par appel |
-| `budget-exhausted` | au-dessus de l'enveloppe restante |
+| `unsupported-method` | anything other than `tempo`/`charge` |
+| `unexpected-chain` | `methodDetails.chainId` ≠ 42431, or missing |
+| `unexpected-currency` | currency ≠ pathUSD |
+| `unexpected-recipient` | recipient outside the allowlist (if defined) |
+| `malformed-amount` | amount that is not a string of digits |
+| `per-call-cap` | above the per-call cap |
+| `budget-exhausted` | above the remaining envelope |
 
-## Deux principes de conception
+## Two design principles
 
-### Module pur
+### Pure module
 
-Aucune I/O, aucune dépendance au SDK au-delà du type `Challenge`. La logique
-qui protège l'argent doit être couvrable exhaustivement sans réseau ni wallet
-— 18 tests en 15 ms.
+No I/O, no dependency on the SDK beyond the `Challenge` type. The logic that
+protects the money must be exhaustively coverable without a network or a
+wallet — 18 tests in 15 ms.
 
 ### Fail-closed
 
-Tout ce qui n'est pas explicitement reconnu est refusé. Champ manquant,
-devise inconnue, montant illisible ⇒ refus. Un agent bloqué se débogue ;
-un agent qui paie n'importe quoi, non.
+Anything not explicitly recognized is refused. Missing field, unknown
+currency, unreadable amount ⇒ refusal. A blocked agent can be debugged; an
+agent that pays for anything cannot.
 
-Cas concret couvert : un Challenge **sans** `chainId` est refusé, pas traité
-comme « probablement le bon réseau ».
+Concrete case covered: a Challenge **without** a `chainId` is refused, not
+treated as "probably the right network".
 
-## Arithmétique entière uniquement
+## Integer arithmetic only
 
-Les montants MPP circulent en **unités de base** sous forme de chaîne
-(`"500000"` = 0,50 pathUSD). `agent/amount.ts` fait toutes les conversions en
-`bigint`, jamais en `number` :
+MPP amounts travel as **base units** in string form (`"500000"` = 0.50
+pathUSD). `agent/amount.ts` does all conversions in `bigint`, never in
+`number`:
 
 ```ts
 toBaseUnits('0.50', 6)    // 500000n
-toBaseUnits('0.1234567', 6)  // ✗ AmountError : 7 décimales pour un jeton à 6
-toBaseUnits('1e-3', 6)       // ✗ AmountError : pas un montant décimal simple
+toBaseUnits('0.1234567', 6)  // ✗ AmountError: 7 decimals for a 6-decimal token
+toBaseUnits('1e-3', 6)       // ✗ AmountError: not a plain decimal amount
 ```
 
-Un test vérifie que `toBaseUnits('0.1') + toBaseUnits('0.2') === toBaseUnits('0.3')`
-— ce qui est faux en flottant. **Plus de décimales que le jeton n'en a
-⇒ refus, jamais arrondi.** Un arrondi silencieux sur un montant, c'est une
-perte d'argent qui ne laisse pas de trace.
+A test checks that `toBaseUnits('0.1') + toBaseUnits('0.2') === toBaseUnits('0.3')`
+— which is false in floating point. **More decimals than the token has ⇒
+refusal, never rounding.** A silent rounding on an amount is a loss of money
+that leaves no trace.
 
-## Réservation, puis confirmation
+## Reserve, then confirm
 
-Le guard ne décompte pas la dépense au moment du paiement, mais en deux temps :
+The guard does not count the spend at payment time, but in two steps:
 
 ```
-authorize(challenge)  →  engage le montant     (reserved += montant)
-settle(challengeId)   →  l'engagement devient une dépense  (committed += montant)
-release(challengeId)  →  rend l'engagement à l'enveloppe
+authorize(challenge)  →  commits the amount     (reserved += amount)
+settle(challengeId)   →  the commitment becomes spend  (committed += amount)
+release(challengeId)  →  gives the commitment back to the envelope
 ```
 
 `remaining = totalBudget − committed − reserved`.
 
-**Pourquoi compter les engagements** : sans ça, deux appels concurrents
-passent chacun sous le plafond et le franchissent ensemble. Un test le
-verrouille (deux réservations de 1,00 sur une enveloppe de 2,50 ⇒ le
-troisième appel à 0,60 est refusé, alors qu'aucun n'est encore confirmé).
+**Why count commitments**: without this, two concurrent calls each pass under
+the cap and cross it together. A test locks it in (two reservations of 1.00
+on a 2.50 envelope ⇒ the third call at 0.60 is refused, although none is
+confirmed yet).
 
-Si l'issue d'un paiement reste inconnue, l'engagement **reste engagé** :
-sur-compter fait s'arrêter l'agent trop tôt, sous-compter le fait dépenser
-trop. Seule la première erreur est acceptable.
+If the outcome of a payment stays unknown, the commitment **stays committed**:
+over-counting makes the agent stop too early, under-counting makes it spend
+too much. Only the first error is acceptable.
 
-Réautoriser le même `challenge.id` (retry) ne réengage pas deux fois.
+Re-authorizing the same `challenge.id` (retry) does not commit twice.
 
-## Utilisation
+## Usage
 
 ```ts
 const guard = new BudgetGuard({
@@ -86,18 +86,18 @@ const guard = new BudgetGuard({
   chainId: 42431,
   currency: PATH_USD,
   decimals: 6,
-  recipients: ['0xf39F…'],   // optionnel
+  recipients: ['0xf39F…'],   // optional
 })
 
-guard.authorize(challenge)   // lève BudgetDenied pour refuser
+guard.authorize(challenge)   // throws BudgetDenied to refuse
 guard.snapshot()             // { committed: '0.5', reserved: '0', remaining: '9.5', inFlight: 0 }
 ```
 
-`snapshot()` ne contient que des montants — rien d'identifiant, rien de
-sensible. C'est ce qui ira dans les journaux et les métriques (phase 6).
+`snapshot()` only contains amounts — nothing identifying, nothing sensitive.
+This is what goes into logs and metrics (phase 6).
 
 ## Tests
 
-26 tests (18 guard + 8 arithmétique) : autorisation nominale, réservation,
-confirmation, libération, retry, plafond par appel (y compris pile au
-plafond), épuisement d'enveloppe, concurrence, et les sept motifs de refus.
+26 tests (18 guard + 8 arithmetic): nominal authorization, reservation,
+confirmation, release, retry, per-call cap (including exactly at the cap),
+envelope exhaustion, concurrency, and the seven refusal reasons.

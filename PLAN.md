@@ -1,236 +1,236 @@
 # PLAN — Agentic Research Marketplace (MPP)
 
-Découpage en 9 phases. **Règle** : une phase = une branche
-(`phase-N-slug`) + tests `vitest` verts avant de passer à la suivante.
-Chaque fonctionnalité livrée est documentée dans `docs/features/<slug>.md`.
+Split into 9 phases. **Rule**: one phase = one branch
+(`phase-N-slug`) + green `vitest` tests before moving on.
+Every delivered feature is documented in `docs/features/<slug>.md`.
 
-Référence technique : `docs/NOTES.md` (spec 402 sourcée, pièges vérifiés).
-Décisions d'architecture : `docs/DECISIONS.md`.
+Technical reference: `docs/NOTES.md` (sourced 402 spec, verified pitfalls).
+Architecture decisions: `docs/DECISIONS.md`.
 
 ---
 
 ## Vision
 
-Une place de marché où des **agents LLM** achètent des services de recherche
-à l'appel, en stablecoin testnet, sans clé d'API ni inscription — via
+A marketplace where **LLM agents** buy research services per call,
+in testnet stablecoin, with no API key and no sign-up — via
 HTTP 402 / MPP.
 
 ```
-  agent/ (payeur)                          server/ (provider)
+  agent/ (payer)                           server/ (provider)
   ┌──────────────────┐                     ┌──────────────────┐
-  │ Claude + tool use│  1. GET /v1/search  │  Hono + mppx     │
+  │ LLM + tool use   │  1. GET /v1/search  │  Hono + mppx     │
   │                  │ ──────────────────► │                  │
   │ budget guard     │  2. 402 + Challenge │  tempo.charge    │
   │ (onChallenge)    │ ◄────────────────── │  testnet:true    │
   │                  │  3. + Credential    │                  │
-  │ mppx/client      │ ──────────────────► │  vérif + settle  │
+  │ mppx/client      │ ──────────────────► │ verify + settle  │
   │ polyfill:false   │  4. 200 + Receipt   │                  │
   └────────┬─────────┘ ◄────────────────── └────────┬─────────┘
            │                                        │
            └──────────────► ledger/ ◄───────────────┘
-                     (SQLite, journal d'audit)
+                     (SQLite, audit log)
 ```
 
 ---
 
-## Phase 0 — Spec et socle documentaire ✅ **terminée**
+## Phase 0 — Spec and documentation base ✅ **done**
 
-**Objectif** : comprendre le protocole avant d'écrire une ligne de code.
+**Goal**: understand the protocol before writing a line of code.
 
-- [x] Lire la doc MPP (protocole, transports, méthode Tempo, sécurité)
-- [x] Installer `mppx` et inspecter les modules réels
-- [x] `docs/NOTES.md` : flux 402, headers, config testnet, API réelle, pièges
+- [x] Read the MPP docs (protocol, transports, Tempo method, security)
+- [x] Install `mppx` and inspect the real modules
+- [x] `docs/NOTES.md`: 402 flow, headers, testnet config, real API, pitfalls
 
-**Sortie** : `docs/NOTES.md`. Deux pièges majeurs identifiés et mesurés —
-`testnet: true` obligatoire (§4.1), `polyfill: false` obligatoire (§5.4).
-
----
-
-## Phase 1 — Provider MPP : squelette payant
-
-**Branche** : `phase-1-provider`
-
-**Objectif** : un serveur Hono qui répond un vrai 402 conforme, verrouillé
-sur le testnet.
-
-- [ ] `server/config.ts` — chargement `.env`, validation stricte, garde-fou
-      réseau (refus de démarrer hors testnet)
-- [ ] `server/payment.ts` — instance `Mppx.create` + `tempo.charge({ testnet: true })`
-- [ ] `server/app.ts` — app Hono, route gratuite `/healthz`, route payante
-      `/v1/search`, route de découverte `/.well-known/mpp`
-- [ ] `server/index.ts` — point d'entrée `@hono/node-server`
-
-**Critères de sortie (tests)**
-- `GET /healthz` → 200 sans paiement
-- `GET /v1/search` sans Credential → **402**, `WWW-Authenticate: Payment …`
-- en-têtes de sécurité : `Cache-Control: no-store`, `application/problem+json`
-- le Challenge décodé porte `methodDetails.chainId === 42431` **et**
-  `currency === pathUSD` (garde-fou anti-mainnet)
-- le Challenge est lié HMAC : `Challenge.verify(ch, { secretKey })` vrai,
-  faux avec un autre secret
-- `secretKey` < 32 octets → démarrage refusé
+**Output**: `docs/NOTES.md`. Two major pitfalls identified and measured —
+`testnet: true` mandatory (§4.1), `polyfill: false` mandatory (§5.4).
 
 ---
 
-## Phase 2 — Agent payeur et budget guard ✅ **terminée**
+## Phase 1 — MPP provider: paid skeleton
 
-**Branche** : `phase-2-agent-payeur`
+**Branch**: `phase-1-provider`
 
-**Objectif** : un client qui paie tout seul, mais jamais au-delà d'un budget.
+**Goal**: a Hono server that answers a real, compliant 402, locked to the
+testnet.
 
-- [x] `agent/amount.ts` — arithmétique entière (`bigint`), refus d'arrondi
-- [x] `agent/wallet.ts` — compte viem depuis `.env`, jamais en dur ni en log
-- [x] `agent/budget.ts` — budget guard pur : 7 motifs de refus typés,
-      réservation/confirmation/libération
+- [ ] `server/config.ts` — `.env` loading, strict validation, network guard
+      (refuses to start outside testnet)
+- [ ] `server/payment.ts` — `Mppx.create` instance + `tempo.charge({ testnet: true })`
+- [ ] `server/app.ts` — Hono app, free `/healthz` route, paid `/v1/search`
+      route, discovery route `/.well-known/mpp`
+- [ ] `server/index.ts` — `@hono/node-server` entry point
+
+**Exit criteria (tests)**
+- `GET /healthz` → 200 without payment
+- `GET /v1/search` without a Credential → **402**, `WWW-Authenticate: Payment …`
+- security headers: `Cache-Control: no-store`, `application/problem+json`
+- the decoded Challenge carries `methodDetails.chainId === 42431` **and**
+  `currency === pathUSD` (anti-mainnet guard)
+- the Challenge is HMAC-bound: `Challenge.verify(ch, { secretKey })` true,
+  false with another secret
+- `secretKey` < 32 bytes → startup refused
+
+---
+
+## Phase 2 — Paying agent and budget guard ✅ **done**
+
+**Branch**: `phase-2-agent-payeur`
+
+**Goal**: a client that pays on its own, but never beyond a budget.
+
+- [x] `agent/amount.ts` — integer arithmetic (`bigint`), no rounding
+- [x] `agent/wallet.ts` — viem account from `.env`, never hard-coded nor logged
+- [x] `agent/budget.ts` — pure budget guard: 7 typed refusal reasons,
+      reserve/confirm/release
 - [x] `agent/client.ts` — `Mppx.create({ polyfill: false, onChallenge })`
-      + garde-fous SDK (`expectedChainId`, `allowedChainIds`, `expectedRecipients`)
+      + SDK guardrails (`expectedChainId`, `allowedChainIds`, `expectedRecipients`)
 
-**Critères de sortie (tests)** — 40 tests
-- [x] `polyfill: false` vérifié : `globalThis.fetch` inchangé après création
-- [x] au-dessus du plafond par appel → refus, **aucune signature émise**
-- [x] budget total épuisé → refus
-- [x] dépense cumulée correctement décomptée (y compris engagements concurrents)
-- [x] montant mal formé / devise inattendue / chaîne absente → refus (fail-closed)
+**Exit criteria (tests)** — 40 tests
+- [x] `polyfill: false` verified: `globalThis.fetch` unchanged after creation
+- [x] above the per-call cap → refusal, **no signature issued**
+- [x] total budget exhausted → refusal
+- [x] cumulative spend correctly counted (including concurrent commitments)
+- [x] malformed amount / unexpected currency / missing chain → refusal (fail-closed)
 
-**Découverte majeure** : renvoyer `undefined` depuis `onChallenge` **ne refuse
-pas** le paiement — il faut lever. Corrige une erreur de `NOTES.md` §5.4.
-Voir [`DECISIONS.md` D7](docs/DECISIONS.md).
+**Major finding**: returning `undefined` from `onChallenge` **does not refuse**
+the payment — you have to throw. Corrects an error in `NOTES.md` §5.4.
+See [`DECISIONS.md` D7](docs/DECISIONS.md).
 
 ---
 
-## Phase 3 — Ledger SQLite ✅ **terminée**
+## Phase 3 — SQLite ledger ✅ **done**
 
-**Branche** : `phase-3-ledger`
+**Branch**: `phase-3-ledger`
 
-**Objectif** : journal d'audit des paiements, côté serveur et côté agent.
+**Goal**: payments audit log, server side and agent side.
 
-- [x] `ledger/schema.sql` + `ledger/db.ts` (**`better-sqlite3`**, pas
-      `node:sqlite` : indisponible avant Node 22.5 — voir D11)
-- [x] `ledger/record.ts` — écriture depuis `onChallengeCreated`,
+- [x] `ledger/schema.sql` + `ledger/db.ts` (**`better-sqlite3`**, not
+      `node:sqlite`: unavailable before Node 22.5 — see D11)
+- [x] `ledger/record.ts` — written from `onChallengeCreated`,
       `onPaymentSuccess`, `onPaymentFailed`
-- [x] Vues `ledger_reconciliation` et `ledger_unsettled`
+- [x] `ledger_reconciliation` and `ledger_unsettled` views
 
-**Critères de sortie (tests)** — 20 tests
-- [x] un cycle 402 → une ligne `challenged`, puis `success` avec référence et payeur
-- [x] un échec écrit `failed` avec le code d'erreur MPP normalisé
-- [x] **aucun secret journalisé** : lecture binaire du fichier SQLite +
-      assertion sur la liste exacte des colonnes
-- [x] idempotence : rejouer le même `challenge.id` ne duplique pas de ligne
+**Exit criteria (tests)** — 20 tests
+- [x] a 402 cycle → one `challenged` row, then `success` with reference and payer
+- [x] a failure writes `failed` with the normalized MPP error code
+- [x] **no secret logged**: binary read of the SQLite file +
+      assertion on the exact column list
+- [x] idempotence: replaying the same `challenge.id` does not duplicate a row
 
-**Découverte majeure** : l'id de Challenge **n'identifie pas une requête** —
-19 collisions sur 50 requêtes rapides. D'où le compteur `occurrences`.
-Voir [`DECISIONS.md` D12](docs/DECISIONS.md).
-
----
-
-## Phase 4 — Agent LLM avec tool use ✅ **terminée**
-
-**Branche** : `phase-4-agent-llm`
-
-**Objectif** : le modèle décide *lui-même* d'acheter une recherche.
-
-- [x] `agent/llm.ts` — port `LlmClient` + client **DeepSeek** (API compatible
-      OpenAI ; pas d'`@anthropic-ai/sdk`, voir D14)
-- [x] `agent/tools.ts` — outil `search_marketplace` et son exécuteur
-- [x] `agent/loop.ts` — boucle tool use, bornée en tours et en achats
-- [x] `agent/index.ts` — démonstration (`npm run agent -- "…"`)
-- [x] Le budget guard reste l'autorité finale
-
-**Critères de sortie (tests)** — 29 tests
-- [x] boucle testée avec un modèle scripté (aucun appel réseau en CI)
-- [x] un refus du guard revient comme `tool_result` exploitable, jamais en
-      exception ; un refus terminal coupe l'outil pour que le modèle conclue
-- [x] aucune clé privée, aucun Credential, aucun message d'erreur brut
-      n'atteint le contexte du modèle
-
-**Démontré en vrai** contre le provider et le modèle DeepSeek : budget
-insuffisant → refus `per-call-cap`, le modèle conclut en 2 tours en signalant
-la limite ; budget suffisant mais wallet vide → `search-unavailable`, le modèle
-retente une fois. `dépense : 0` dans les deux cas — la réservation est bien
-libérée.
+**Major finding**: the Challenge id **does not identify a request** —
+19 collisions out of 50 rapid requests. Hence the `occurrences` counter.
+See [`DECISIONS.md` D12](docs/DECISIONS.md).
 
 ---
 
-## Phase 5 — E2E testnet réel ✅ **terminée**
+## Phase 4 — LLM agent with tool use ✅ **done**
 
-**Branche** : `phase-5-e2e-testnet`
+**Branch**: `phase-4-agent-llm`
 
-**Objectif** : un vrai paiement on-chain sur Moderato.
+**Goal**: the model decides *by itself* to buy a search.
 
-- [x] Comptes `agent` (payeur, financé) et `provider` (destinataire)
-- [x] `tests/e2e/payment.e2e.test.ts` : agent → serveur → transfert pathUSD
-      réel → `Payment-Receipt`
-- [x] Vérification du hash de transaction sur le RPC **et** du delta de solde
+- [x] `agent/llm.ts` — `LlmClient` port + **DeepSeek** client (OpenAI-compatible
+      API; no `@anthropic-ai/sdk`, see D14)
+- [x] `agent/tools.ts` — `search_marketplace` tool and its executor
+- [x] `agent/loop.ts` — tool use loop, bounded in turns and purchases
+- [x] `agent/index.ts` — demo (`npm run agent -- "…"`)
+- [x] The budget guard remains the final authority
 
-**Critères de sortie**
-- [x] test `*.e2e.test.ts` exclu de `npm test`, lancé par `npm run test:e2e`,
-      auto-ignoré sans `AGENT_PRIVATE_KEY`
-- [x] le `reference` du Receipt correspond à une transaction confirmée sur 42431
-      (bloc 36470584, `status: 0x1`)
-- [x] le solde du destinataire augmente **exactement** du prix (+0,50 pathUSD)
-- [x] anti-rejeu prouvé : le Credential capturé et rejoué → **402**
+**Exit criteria (tests)** — 29 tests
+- [x] loop tested with a scripted model (no network call in CI)
+- [x] a guard refusal comes back as a usable `tool_result`, never as an
+      exception; a terminal refusal disables the tool so the model concludes
+- [x] no private key, no Credential, no raw error message reaches the model
+      context
 
----
-
-## Phase 6 — Observabilité Prometheus ✅ **terminée** (une réserve)
-
-**Branche** : `phase-6-observabilite`
-
-- [x] `/metrics` : challenges émis, paiements réussis/échoués, latence de
-      règlement, dépense cumulée de l'agent
-- [x] Labels sûrs uniquement (method, intent, status) — jamais d'identifiant
-      de paiement ni de montant nominatif
-
-**Critères de sortie** : test qui assert la présence des séries et
-**l'absence** de toute valeur sensible dans l'export. ✅ (4 tests)
-
-`/metrics` protégé par jeton bearer (`METRICS_TOKEN`) ; les gauges de
-l'agent sont servies par le processus agent (`agent/metrics-server.ts`, branche
-`phase-6b-metriques-agent`). ⚠️ Agent éphémère : fenêtre de scrape bornée.
+**Demonstrated for real** against the provider and the DeepSeek model:
+insufficient budget → `per-call-cap` refusal, the model concludes in 2 turns
+mentioning the limit; sufficient budget but empty wallet → `search-unavailable`,
+the model retries once. `spent: 0` in both cases — the reservation is indeed
+released.
 
 ---
 
-## Phase 7 — Docker Compose ✅ **terminée** (une réserve)
+## Phase 5 — Real testnet E2E ✅ **done**
 
-**Branche** : `phase-7-docker`
+**Branch**: `phase-5-e2e-testnet`
 
-- [x] `Dockerfile` (multi-stage, non-root), `compose.yml` : server + agent +
+**Goal**: a real on-chain payment on Moderato.
+
+- [x] `agent` (payer, funded) and `provider` (recipient) accounts
+- [x] `tests/e2e/payment.e2e.test.ts`: agent → server → real pathUSD
+      transfer → `Payment-Receipt`
+- [x] Verification of the transaction hash on the RPC **and** of the balance delta
+
+**Exit criteria**
+- [x] `*.e2e.test.ts` test excluded from `npm test`, run by `npm run test:e2e`,
+      skipped without `AGENT_PRIVATE_KEY`
+- [x] the Receipt `reference` matches a transaction confirmed on 42431
+      (block 36470584, `status: 0x1`)
+- [x] the recipient balance increases **exactly** by the price (+0.50 pathUSD)
+- [x] replay protection proven: the captured and replayed Credential → **402**
+
+---
+
+## Phase 6 — Prometheus observability ✅ **done** (one caveat)
+
+**Branch**: `phase-6-observabilite`
+
+- [x] `/metrics`: issued challenges, successful/failed payments, settlement
+      latency, cumulative agent spend
+- [x] Safe labels only (method, intent, status) — never a payment identifier
+      nor a nominal amount
+
+**Exit criteria**: a test that asserts the presence of the series and
+the **absence** of any sensitive value in the export. ✅ (4 tests)
+
+`/metrics` protected by a bearer token (`METRICS_TOKEN`); the agent gauges
+are served by the agent process (`agent/metrics-server.ts`, branch
+`phase-6b-metriques-agent`). ⚠️ Short-lived agent: bounded scrape window.
+
+---
+
+## Phase 7 — Docker Compose ✅ **done**
+
+**Branch**: `phase-7-docker`
+
+- [x] `Dockerfile` (multi-stage, non-root), `compose.yml`: server + agent +
       Prometheus
-- [x] Secrets injectés par l'environnement, jamais dans l'image
+- [x] Secrets injected by the environment, never in the image
 
-**Critères de sortie** : `docker compose up` → `/healthz` et `/metrics`
-répondent ; `docker history` ne révèle aucun secret. ✅ (`/metrics` exige
-le jeton). ⚠️ Service `agent` non lancé (clés requises).
-
----
-
-## Phase 8 — Durcissement ✅ **terminée** (une réserve)
-
-**Branche** : `phase-8-durcissement` — *traitée avant les phases 6 et 7,
-pour fermer le seul trou de sécurité réel.*
-
-- [x] Liaison du corps sur `POST /v1/analyze` — via `scope` + `BodyDigest`,
-      le serveur TS de mppx n'ayant **pas** d'option `body` (voir D20)
-- [x] Store anti-rejeu partagé **et durable** : `sqlite` (défaut) ou `redis`,
-      le store mémoire refusé sans acquittement explicite (D21)
-- [ ] ⚠️ Rotation de `MPP_SECRET_KEY` avec recouvrement — **non implémentée** :
-      `Mppx.create` ne prend qu'une seule clé. Procédure coordonnée documentée
-      à la place, fenêtre bornée à 5 min (D22)
-- [x] `Cache-Control: private` sur les 200 porteuses d'un Receipt
-- [x] Revue de sécurité contre `docs/NOTES.md` §8 — 9 exigences sur 10
-
-**Critères de sortie**
-- [x] corps modifié après émission du Challenge → `invalid-challenge`
-      (contre `verification-failed` avec le corps d'origine : c'est le
-      contraste qui prouve la discrimination)
-- [x] Credential rejoué → 402, marqueur **persisté sur disque**
-- [x] checklist §8 : 9/10, la dixième bloquée par le SDK et documentée
+**Exit criteria**: `docker compose up` → `/healthz` and `/metrics`
+respond; `docker history` reveals no secret. ✅ (`/metrics` requires the
+token). The full `agent` service was also run end to end under Compose.
 
 ---
 
-## Hors périmètre (pour mémoire)
+## Phase 8 — Hardening ✅ **done** (one caveat)
 
-Disponibles dans `mppx` mais volontairement repoussés : intent `session`
-(facturation à l'usage), intent `subscription`, streaming SSE facturé,
-compatibilité x402, paiements par carte (Stripe). Voir `docs/NOTES.md` §6.
-On les envisagera une fois le flux `charge` couvert de bout en bout.
+**Branch**: `phase-8-durcissement` — *handled before phases 6 and 7,
+to close the one real security hole.*
+
+- [x] Body binding on `POST /v1/analyze` — via `scope` + `BodyDigest`,
+      the mppx TS server having **no** `body` option (see D20)
+- [x] Shared **and durable** replay store: `sqlite` (default) or `redis`,
+      the memory store refused without an explicit acknowledgement (D21)
+- [ ] ⚠️ `MPP_SECRET_KEY` rotation with overlap — **not implemented**:
+      `Mppx.create` takes a single key. A coordinated procedure is documented
+      instead, window bounded to 5 min (D22)
+- [x] `Cache-Control: private` on 200s carrying a Receipt
+- [x] Security review against `docs/NOTES.md` §8 — 9 requirements out of 10
+
+**Exit criteria**
+- [x] body modified after Challenge issuance → `invalid-challenge`
+      (versus `verification-failed` with the original body: the contrast
+      is what proves the discrimination)
+- [x] replayed Credential → 402, marker **persisted to disk**
+- [x] §8 checklist: 9/10, the tenth blocked by the SDK and documented
+
+---
+
+## Out of scope (for the record)
+
+Available in `mppx` but deliberately postponed: `session` intent
+(usage-based billing), `subscription` intent, billed SSE streaming,
+x402 compatibility, card payments (Stripe). See `docs/NOTES.md` §6.
+We will consider them once the `charge` flow is covered end to end.

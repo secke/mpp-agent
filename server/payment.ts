@@ -1,15 +1,15 @@
 /**
- * Instance de paiement MPP du provider.
+ * MPP payment instance of the provider.
  *
- * Sources :
- * - `Mppx.create` / `tempo.charge` : https://mpp.dev/sdk/typescript/server/Mppx.create
- *   et node_modules/mppx/dist/server/Mppx.d.ts, dist/tempo/server/Charge.d.ts
- * - Adaptateur Hono : https://mpp.dev/sdk/typescript/middlewares/hono
+ * Sources:
+ * - `Mppx.create` / `tempo.charge`: https://mpp.dev/sdk/typescript/server/Mppx.create
+ *   and node_modules/mppx/dist/server/Mppx.d.ts, dist/tempo/server/Charge.d.ts
+ * - Hono adapter: https://mpp.dev/sdk/typescript/middlewares/hono
  *
- * ⚠️ INVARIANT : on passe `testnet: true`, jamais `chainId` seul.
- * Mesuré en phase 0 (docs/NOTES.md §4.1) : `tempo.charge({ chainId: 42431 })`
- * émet un Challenge annonçant chainId 4217 (mainnet) avec une devise testnet —
- * configuration incohérente. Seul `testnet: true` aligne les deux.
+ * ⚠️ INVARIANT: we pass `testnet: true`, never `chainId` alone.
+ * Measured in phase 0 (docs/NOTES.md §4.1): `tempo.charge({ chainId: 42431 })`
+ * issues a Challenge advertising chainId 4217 (mainnet) with a testnet
+ * currency — an inconsistent configuration. Only `testnet: true` aligns both.
  */
 import { Challenge, type Store } from 'mppx'
 import { Mppx, tempo } from 'mppx/hono'
@@ -21,16 +21,16 @@ export type Payment = ReturnType<typeof createPayment>
 export function createPayment(
   config: Config,
   /**
-   * Store anti-rejeu. Omis, mppx retombe sur un store **mémoire** : non
-   * partagé entre processus et perdu au redémarrage (voir server/stores.ts).
-   * `loadConfig` refuse ce défaut sans acquittement explicite.
+   * Replay store. If omitted, mppx falls back to an **in-memory** store: not
+   * shared between processes and lost on restart (see server/stores.ts).
+   * `loadConfig` refuses this default without an explicit acknowledgement.
    */
   store?: Store.AtomicStore | undefined,
 ) {
   return Mppx.create({
     methods: [
       tempo.charge({
-        testnet: true, // ← seul réglage cohérent (NOTES §4.1)
+        testnet: true, // ← the only consistent setting (NOTES §4.1)
         recipient: config.recipient,
         currency: PATH_USD,
         decimals: TOKEN_DECIMALS,
@@ -47,9 +47,9 @@ export class MainnetGuardError extends Error {
 }
 
 /**
- * Garde-fou n°2, à l'exécution : vérifie qu'un Challenge réellement émis
- * cible bien le testnet. Protège contre une régression du SDK ou une
- * mauvaise option — le coût d'une erreur ici, c'est de l'argent réel.
+ * Guard #2, at runtime: checks that a Challenge actually issued targets the
+ * testnet. Protects against an SDK regression or a wrong option — the cost of
+ * a mistake here is real money.
  */
 export function assertTestnetChallenge(challenge: Challenge.Challenge): void {
   const request = challenge.request as {
@@ -59,18 +59,18 @@ export function assertTestnetChallenge(challenge: Challenge.Challenge): void {
   const chainId = request.methodDetails?.chainId
   if (chainId !== TESTNET_CHAIN_ID)
     throw new MainnetGuardError(
-      `Challenge émis sur chainId=${chainId}, attendu ${TESTNET_CHAIN_ID} (Tempo Moderato). ` +
-        `Refus de servir : risque de paiement sur le réseau principal.`,
+      `Challenge issued on chainId=${chainId}, expected ${TESTNET_CHAIN_ID} (Tempo Moderato). ` +
+        `Refusing to serve: risk of a payment on the main network.`,
     )
   if (request.currency?.toLowerCase() !== PATH_USD)
     throw new MainnetGuardError(
-      `Challenge émis avec currency=${request.currency}, attendu pathUSD (${PATH_USD}).`,
+      `Challenge issued with currency=${request.currency}, expected pathUSD (${PATH_USD}).`,
     )
 }
 
 /**
- * Auto-test de démarrage : émet un Challenge pour de faux et le valide.
- * Appelé avant d'ouvrir le port, pour échouer vite plutôt qu'en production.
+ * Startup self-test: issues a dummy Challenge and validates it.
+ * Called before opening the port, to fail fast rather than in production.
  */
 export async function selfCheck(payment: Payment, config: Config): Promise<void> {
   const challenge = await payment.challenge.tempo.charge({ amount: config.searchPrice })

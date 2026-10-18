@@ -1,18 +1,18 @@
 /**
- * Journal d'audit des paiements.
+ * Payments audit log.
  *
- * Alimenté par les hooks serveur de mppx :
- *   onChallengeCreated → ligne `challenged`
- *   onPaymentSuccess   → passe à `success` + référence + payeur
- *   onPaymentFailed    → passe à `failed` + code d'erreur normalisé
+ * Fed by the mppx server hooks:
+ *   onChallengeCreated → `challenged` row
+ *   onPaymentSuccess   → moves to `success` + reference + payer
+ *   onPaymentFailed    → moves to `failed` + normalized error code
  *
- * ⚠️ Les handlers serveur s'exécutent **en ligne** sur le chemin de la requête
+ * ⚠️ Server handlers run **inline** on the paid request path
  * payante (https://mpp.dev/sdk/typescript/server/Mppx.create § Event handling).
- * Toutes les écritures ici sont synchrones et préparées une fois — better-sqlite3
- * est synchrone par conception, ce qui évite d'introduire une file d'attente.
+ * All writes here are synchronous and prepared once — better-sqlite3
+ * is synchronous by design, which avoids introducing a queue.
  *
- * ⚠️ Rien de sensible n'entre dans cette base : ni Credential, ni Receipt brut,
- * ni secret, ni message d'erreur. Voir le commentaire de tête de schema.sql.
+ * ⚠️ Nothing sensitive enters this database: no Credential, no raw Receipt,
+ * no secret, no error message. See the header comment of schema.sql.
  */
 import { Challenge } from 'mppx'
 
@@ -49,9 +49,9 @@ export type ReconciliationRow = {
 }
 
 /**
- * Extrait le code MPP normalisé d'une URI de problème.
- * « https://paymentauth.org/problems/verification-failed » → « verification-failed »
- * Source des types : docs/NOTES.md §2, node_modules/mppx/dist/Errors.d.ts
+ * Extracts the normalized MPP code from a problem URI.
+ * "https://paymentauth.org/problems/verification-failed" → "verification-failed"
+ * Type source: docs/NOTES.md §2, node_modules/mppx/dist/Errors.d.ts
  */
 export function normalizeErrorCode(error: unknown): string {
   const type = (error as { type?: unknown } | null)?.type
@@ -63,7 +63,7 @@ export function normalizeErrorCode(error: unknown): string {
   return typeof name === 'string' && name.length > 0 ? name : 'unknown'
 }
 
-/** Route liée au Challenge via `opaque`, quand mppx l'y a placée. */
+/** Route bound to the Challenge via `opaque`, when mppx put it there. */
 function routeOf(challenge: Challenge.Challenge): string | null {
   try {
     return Challenge.meta(challenge)?.['_mppx_scope'] ?? null
@@ -86,9 +86,9 @@ export class Ledger {
   constructor(db: LedgerDatabase) {
     this.#db = db
 
-    // Un Challenge déjà vu n'ajoute pas de ligne et n'écrase pas son statut :
-    // il incrémente `occurrences`. Nécessaire parce que deux requêtes
-    // identiques dans la même milliseconde partagent leur id (voir schema.sql).
+    // A Challenge already seen adds no row and does not overwrite its status:
+    // it increments `occurrences`. Needed because two identical requests
+    // within the same millisecond share their id (see schema.sql).
     this.#insert = db.prepare(`
       insert into payments (
         challenge_id, realm, method, intent, route, amount, currency,
@@ -101,8 +101,8 @@ export class Ledger {
         set occurrences = occurrences + 1, updated_at = @now
     `)
 
-    // Une ligne déjà résolue ne repasse pas en arrière : la garde sur `status`
-    // rend l'opération idempotente même si le hook est appelé deux fois.
+    // A row already resolved does not go backwards: the guard on `status`
+    // makes the operation idempotent even if the hook is called twice.
     this.#settle = db.prepare(`
       update payments
          set status = 'success', reference = @reference, payer = @payer,
@@ -117,9 +117,9 @@ export class Ledger {
        where challenge_id = @challenge_id and status != 'success'
     `)
 
-    // Variante non comptante : garantit l'existence de la ligne sans gonfler
-    // `occurrences`. Utilisée par les handlers success/failed, qui peuvent
-    // voir un Challenge déjà enregistré par onChallengeCreated.
+    // Non-counting variant: guarantees the row exists without inflating
+    // `occurrences`. Used by the success/failed handlers, which may see a
+    // Challenge already recorded by onChallengeCreated.
     this.#ensure = db.prepare(`
       insert into payments (
         challenge_id, realm, method, intent, route, amount, currency,
@@ -138,17 +138,17 @@ export class Ledger {
   }
 
   /**
-   * Enregistre un Challenge émis. Une ligne par id ; les émissions répétées
-   * du même id incrémentent `occurrences`.
+   * Records an issued Challenge. One row per id; repeated issuances of the
+   * same id increment `occurrences`.
    */
   recordChallenge(challenge: Challenge.Challenge, realm: string): void {
     this.#write(this.#insert, challenge, realm)
   }
 
   /**
-   * Garantit l'existence de la ligne **sans** compter une émission.
-   * Pour les chemins success/failed, qui peuvent arriver sur un Challenge
-   * déjà enregistré (ou jamais vu : redémarrage, autre instance).
+   * Guarantees the row exists **without** counting an issuance.
+   * For the success/failed paths, which may arrive on a Challenge already
+   * recorded (or never seen: restart, another instance).
    */
   ensureChallenge(challenge: Challenge.Challenge, realm: string): void {
     this.#write(this.#ensure, challenge, realm)
@@ -182,7 +182,7 @@ export class Ledger {
     })
   }
 
-  /** Marque un paiement abouti. `reference` = hash de transaction (via le Receipt). */
+  /** Marks a payment as completed. `reference` = transaction hash (via the Receipt). */
   recordSuccess(params: {
     challengeId: string
     reference?: string | null
@@ -196,7 +196,7 @@ export class Ledger {
     })
   }
 
-  /** Marque un échec avec le code MPP normalisé. Le message d'erreur n'est pas stocké. */
+  /** Marks a failure with the normalized MPP code. The error message is not stored. */
   recordFailure(params: {
     challengeId: string
     error: unknown
@@ -231,7 +231,7 @@ export class Ledger {
   }
 }
 
-/** Type minimal des hooks serveur dont le ledger a besoin. */
+/** Minimal type of the server hooks the ledger needs. */
 type HookTarget = {
   realm: string
   onChallengeCreated: (handler: (context: { challenge: Challenge.Challenge }) => void) => unknown
@@ -251,15 +251,15 @@ type HookTarget = {
   ) => unknown
 }
 
-/** Branche le ledger sur une instance de paiement serveur. */
+/** Hooks the ledger onto a server payment instance. */
 export function attachLedger(payment: HookTarget, ledger: Ledger): void {
   payment.onChallengeCreated(({ challenge }) => {
     ledger.recordChallenge(challenge, payment.realm)
   })
 
   payment.onPaymentSuccess(({ challenge, receipt, credential }) => {
-    // Le Challenge peut n'avoir jamais été vu (redémarrage, autre instance).
-    // `ensureChallenge` crée la ligne au besoin sans compter une émission de plus.
+    // The Challenge may never have been seen (restart, another instance).
+    // `ensureChallenge` creates the row if needed without counting one more issuance.
     ledger.ensureChallenge(challenge, payment.realm)
     ledger.recordSuccess({
       challengeId: challenge.id,

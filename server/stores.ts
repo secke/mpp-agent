@@ -1,30 +1,30 @@
 /**
- * Stores anti-rejeu partagés.
+ * Shared replay-protection stores.
  *
- * Le défaut de `tempo.charge` est un store **mémoire**
- * (node_modules/mppx/dist/tempo/server/Charge.d.ts : « Non-zero charge flows
- * default to an in-memory store if omitted »). Il a deux angles morts :
+ * The `tempo.charge` default is an **in-memory** store
+ * (node_modules/mppx/dist/tempo/server/Charge.d.ts: "Non-zero charge flows
+ * default to an in-memory store if omitted"). It has two blind spots:
  *
- *   1. **multi-processus** — deux instances ne partagent pas leur mémoire,
- *      donc le même Credential passe une fois par instance ;
- *   2. **redémarrage** — les marqueurs sont perdus, donc un Credential
- *      redevient rejouable tant que son Challenge n'a pas expiré.
+ *   1. **multi-process** — two instances do not share memory, so the same
+ *      Credential passes once per instance;
+ *   2. **restart** — markers are lost, so a Credential becomes replayable
+ *      again until its Challenge expires.
  *
- * Le second est le plus insidieux : il touche même un déploiement mono-instance.
+ * The second is the more insidious: it affects even a single-instance deployment.
  *
- * Contrat implémenté : `Store.AtomicStore` — `get`/`put`/`delete`/`update`,
- * plus le chemin rapide `tryClaim` (node_modules/mppx/dist/Store.d.ts).
+ * Contract implemented: `Store.AtomicStore` — `get`/`put`/`delete`/`update`,
+ * plus the fast path `tryClaim` (node_modules/mppx/dist/Store.d.ts).
  */
 import Database from 'better-sqlite3'
 import type { Store } from 'mppx'
 
 type AnyStore = Store.AtomicStore<Record<string, unknown>>
 
-/** Marqueur de rejeu tel que mppx l'attend en repli de `tryClaim`. */
+/** Replay marker as mppx expects it as a fallback to `tryClaim`. */
 const REPLAY_TYPE = 'mppx:replay'
 
 // ─────────────────────────────────────────────────────────────────────
-// SQLite — partagé entre processus d'une même machine, et durable.
+// SQLite — shared between processes on one machine, and durable.
 // ─────────────────────────────────────────────────────────────────────
 
 const SCHEMA = `
@@ -51,8 +51,8 @@ export function sqliteStore(path: string): SqliteStore {
        on conflict(key) do update set value = @value, expires = @expires`,
   )
   const remove = db.prepare(`delete from replay where key = ?`)
-  // `insert or ignore` : une seule instruction SQL atomique, donc pas de
-  // fenêtre TOCTOU entre le test d'existence et l'écriture.
+  // `insert or ignore`: a single atomic SQL statement, so there is no
+  // TOCTOU window between the existence check and the write.
   const claim = db.prepare(
     `insert or ignore into replay (key, value, expires) values (?, ?, ?)`,
   )
@@ -85,8 +85,8 @@ export function sqliteStore(path: string): SqliteStore {
       remove.run(key)
     },
     async update(key, fn) {
-      // better-sqlite3 est synchrone : la transaction garantit l'atomicité
-      // de lecture-modification-écriture face aux autres connexions.
+      // better-sqlite3 is synchronous: the transaction guarantees the
+      // read-modify-write is atomic with respect to other connections.
       const run = db.transaction(() => {
         const change = fn(read(key) as never)
         if (change.op === 'set')
@@ -112,11 +112,11 @@ export function sqliteStore(path: string): SqliteStore {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Redis — partagé entre machines.
+// Redis — shared between machines.
 // ─────────────────────────────────────────────────────────────────────
 
 /**
- * Client Redis minimal attendu par `Store.redis`
+ * Minimal Redis client expected by `Store.redis`
  * (node_modules/mppx/dist/Store.d.ts, `redis.AtomicParameters`).
  */
 export type RedisLike = {
@@ -126,12 +126,12 @@ export type RedisLike = {
 }
 
 /**
- * Adapte un client Redis au contrat `AtomicStore`.
+ * Adapts a Redis client to the `AtomicStore` contract.
  *
- * ⚠️ `update` est émulé par lecture puis écriture : ce n'est **pas** atomique
- * entre instances. Pour l'anti-rejeu, seul `tryClaim` compte, et il s'appuie
- * sur `SET NX PX` — atomique côté serveur Redis. C'est pourquoi `tryClaim`
- * est fourni explicitement plutôt que laissé au repli de mppx.
+ * ⚠️ `update` is emulated as read-then-write: it is **not** atomic across
+ * instances. For replay protection only `tryClaim` matters, and it relies on
+ * `SET NX PX` — atomic on the Redis server. That is why `tryClaim` is
+ * provided explicitly rather than left to the mppx fallback.
  */
 export function redisStore(
   client: RedisLike & {

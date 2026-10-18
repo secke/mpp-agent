@@ -1,8 +1,8 @@
 /**
- * Point d'entrée du provider.
+ * Provider entry point.
  *
- * Lancement : `npm run dev` (= node --env-file=.env --import tsx server/index.ts)
- * `--env-file` est natif depuis Node 20.6 — pas de dépendance dotenv.
+ * Run with: `npm run dev` (= node --env-file=.env --import tsx server/index.ts)
+ * `--env-file` is native since Node 20.6 — no dotenv dependency.
  */
 import { serve } from '@hono/node-server'
 
@@ -19,27 +19,27 @@ import { createPayment, selfCheck } from './payment.ts'
 
 const config = loadConfig()
 
-// Store anti-rejeu. Le défaut mémoire de mppx n'est ni partagé entre
-// processus ni durable : `loadConfig` le refuse sans acquittement explicite.
+// Replay store. The mppx in-memory default is neither shared between
+// processes nor durable: `loadConfig` refuses it without an explicit acknowledgement.
 const { store } = await createReplayStore(config)
 const payment = createPayment(config, store)
 
-// Échouer au démarrage plutôt qu'à la première requête payante.
+// Fail at startup rather than on the first paid request.
 await selfCheck(payment, config)
 
-// Journal d'audit : branché sur les hooks, hors du chemin métier.
+// Audit ledger: hooked in, off the business path.
 if (config.ledgerPath !== ':memory:') mkdirSync(dirname(config.ledgerPath), { recursive: true })
 const ledger = new Ledger(openLedger(config.ledgerPath))
 attachLedger(payment, ledger)
 
-// Export désactivé sans METRICS_TOKEN (voir server/app.ts).
+// Export disabled without METRICS_TOKEN (see server/app.ts).
 const metrics = config.metricsToken ? createMetrics() : undefined
 metrics?.attach(payment)
 
 const app = createApp(config, payment, metrics)
 
 serve({ fetch: app.fetch, port: config.port }, ({ port }) => {
-  console.log(`provider MPP à l'écoute sur http://localhost:${port}`)
-  console.log(`realm=${config.realm} · réseau=Tempo Moderato (42431) · prix=${config.searchPrice}`)
-  console.log(`ledger=${config.ledgerPath} · anti-rejeu=${config.replayStore}`)
+  console.log(`MPP provider listening on http://localhost:${port}`)
+  console.log(`realm=${config.realm} · network=Tempo Moderato (42431) · price=${config.searchPrice}`)
+  console.log(`ledger=${config.ledgerPath} · replay-store=${config.replayStore}`)
 })
