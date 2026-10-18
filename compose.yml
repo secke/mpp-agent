@@ -44,7 +44,7 @@ services:
   agent:
     profiles: ["agent"]
     build: .
-    command: ["node", "--import", "tsx", "agent/index.ts"]
+    entrypoint: ["node", "--import", "tsx", "agent/index.ts"]
     environment:
       AGENT_PROVIDER_URL: http://server:8787
       AGENT_PRIVATE_KEY: ${AGENT_PRIVATE_KEY:-}
