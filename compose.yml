@@ -50,6 +50,10 @@ services:
       AGENT_PRIVATE_KEY: ${AGENT_PRIVATE_KEY:-}
       MPP_NETWORK: testnet
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      # Export Prometheus : l'agent sert /metrics pendant le run puis le maintient.
+      AGENT_METRICS_PORT: "9464"
+      AGENT_METRICS_LINGER: ${AGENT_METRICS_LINGER:-45}
+      METRICS_TOKEN: ${METRICS_TOKEN:?METRICS_TOKEN requis (>= 16 car.)}
     depends_on:
       server:
         condition: service_healthy

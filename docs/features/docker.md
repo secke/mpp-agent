@@ -6,7 +6,7 @@
 ```
 export MPP_SECRET_KEY=… MPP_RECIPIENT=0x… METRICS_TOKEN=… # ou un .env
 docker compose up -d --build
-docker compose --profile agent run --rm agent "ta question"
+docker compose --profile agent run --rm --use-aliases agent "ta question"
 ```
 
 ## Choix
@@ -28,7 +28,7 @@ docker compose --profile agent run --rm agent "ta question"
 de secret · utilisateur du conteneur uid 1000 · aucun `.env` dans l'image.
 
 ## Limites
-- Le service `agent` n'a pas été lancé (clé DeepSeek / wallet financé requis).
-- Les gauges de l'agent ne sont toujours pas exposées (voir observabilite.md).
+- Le service `agent` complet n'a pas été lancé (clé DeepSeek / wallet financé requis) ;
+  le scrape de son `/metrics` a été vérifié avec une sonde utilisant le même serveur de métriques.
 - `tsx` (devDependency) exécute le TypeScript à l'exécution : image plus lourde
   qu'un build compilé.

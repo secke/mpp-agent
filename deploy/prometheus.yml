@@ -9,3 +9,14 @@ scrape_configs:
       credentials_file: /run/secrets/metrics_token
     static_configs:
       - targets: ["server:8787"]
+
+  # Agent : processus éphémère. La cible passe « down » hors des runs ; la
+  # série reste interrogeable dans l'historique (voir docs/features/observabilite.md).
+  - job_name: mpp-agent
+    metrics_path: /metrics
+    scrape_interval: 10s
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/metrics_token
+    static_configs:
+      - targets: ["agent:9464"]

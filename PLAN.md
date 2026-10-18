@@ -184,8 +184,9 @@ libérée.
 **Critères de sortie** : test qui assert la présence des séries et
 **l'absence** de toute valeur sensible dans l'export. ✅ (4 tests)
 
-⚠️ Réserve : `/metrics` protégé par jeton bearer (`METRICS_TOKEN`) ; les gauges de l'agent ne sont pas encore exposées par un
-endpoint du processus agent (voir `docs/features/observabilite.md`).
+`/metrics` protégé par jeton bearer (`METRICS_TOKEN`) ; les gauges de
+l'agent sont servies par le processus agent (`agent/metrics-server.ts`, branche
+`phase-6b-metriques-agent`). ⚠️ Agent éphémère : fenêtre de scrape bornée.
 
 ---
 

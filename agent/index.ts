@@ -7,14 +7,20 @@
  */
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 
+import { createMetrics } from '../observability/metrics.ts'
 import { fromBaseUnits } from './amount.ts'
 import { BudgetGuard } from './budget.ts'
 import { createPayingClient } from './client.ts'
+import { startMetricsServer } from './metrics-server.ts'
 import { createLlm, loadLlmConfig } from './llm.ts'
 import { runAgent } from './loop.ts'
 import { createToolExecutor } from './tools.ts'
 import { loadAgentConfig } from './wallet.ts'
 
+// Export Prometheus optionnel : actif seulement avec AGENT_METRICS_PORT *et*
+// METRICS_TOKEN (≥ 16 car.). Sans jeton, rien n'est exposé.
+const metricsPort = Number(process.env['AGENT_METRICS_PORT'] ?? 0)
+const metricsToken = process.env['METRICS_TOKEN'] ?? ''
 const question = process.argv.slice(2).join(' ').trim()
 if (!question) {
   console.error('Usage : npm run agent -- "ta question"')
@@ -46,6 +52,15 @@ const execute = createToolExecutor({
   },
 })
 
+const metricsServer =
+  metricsPort > 0 && metricsToken.length >= 16
+    ? await (async () => {
+        const metrics = createMetrics()
+        metrics.attachAgent(guard)
+        return startMetricsServer(metrics, { port: metricsPort, token: metricsToken })
+      })()
+    : undefined
+
 console.log(`modèle    : ${llmConfig.model} (${llmConfig.baseUrl})`)
 console.log(`payeur    : ${agent.account.address}${ephemeral ? '  ⚠️ éphémère, non financé' : ''}`)
 console.log(
@@ -68,3 +83,11 @@ for (const step of run.steps) {
 console.log(`\nréponse   : ${run.answer ?? '(le modèle n’a pas conclu)'}`)
 console.log(`arrêt     : ${run.stopReason} en ${run.turns} tour(s)`)
 console.log(`dépense   : ${guard.snapshot().committed} / reste ${guard.snapshot().remaining}`)
+
+// Laisse Prometheus scraper l'état final avant de quitter.
+if (metricsServer) {
+  const linger = Number(process.env['AGENT_METRICS_LINGER'] ?? 30)
+  console.log(`métriques : :${metricsServer.port}/metrics maintenues ${linger}s`)
+  await new Promise((r) => setTimeout(r, linger * 1000))
+  await metricsServer.close()
+}
