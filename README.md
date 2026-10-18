@@ -68,7 +68,6 @@ npm install
 cp .env.example .env
 ```
 
-`.env` is ignored by git. **Never commit a secret.**
 
 ### 2. Create two testnet accounts
 
@@ -76,7 +75,7 @@ The provider **collects**, the agent **pays**: two distinct accounts.
 
 ```bash
 npx mppx account create --account main      # recipient (provider)
-npx mppx account create --account agent     # payer
+npx mppx account create --account agent     # buy
 npx mppx account fund --network testnet --account agent
 npx mppx account view --account main        # address → MPP_RECIPIENT
 npx mppx account export --account agent     # key     → AGENT_PRIVATE_KEY
