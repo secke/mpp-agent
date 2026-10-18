@@ -185,7 +185,7 @@ error is converted to a structured `tool_result` — never a raw message to the 
 
 The testnet guard is deliberate (`server/config.ts`, `server/payment.ts`).
 Switching network is a security decision, not a setting: re-read
-[`docs/NOTES.md`](docs/NOTES.md) §4 and §8 and update the guard tests before
+[`docs/NOTES.md`](docs/NOTES.md) 4 and 8 and update the guard tests before
 touching `testnet: true`.
 
 ### Not done yet
